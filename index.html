@@ -112,6 +112,9 @@
   .radio input{accent-color:var(--accent)}
   .rec-status{font-size:12px;color:var(--muted)}
   .rec-status.on{color:var(--done)}
+  .folder-status{font-size:12px;color:var(--muted);min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .folder-status.on{color:var(--done)}
+  #folderClear[hidden]{display:none}
   .rec-note{font-size:11px;color:var(--muted);margin-top:10px;line-height:1.55}
   .rec-label{font-size:13px;color:var(--muted)}
   .mic-select{background:var(--surface-2);color:var(--text);border:1px solid var(--line);border-radius:9px;padding:7px 9px;font-family:inherit;font-size:13px;max-width:230px;flex:1}
@@ -181,7 +184,7 @@
 <div class="overlay" id="overlay" hidden>
   <div class="panel">
     <div class="panel-head">
-      <span>설정<small>기본 시간 · 응답 녹음</small></span>
+      <span>설정<small>기본 시간 · 응답 녹음 · 자동 저장</small></span>
       <button class="iconbtn" id="closeSet">✕</button>
     </div>
     <div class="rows">
@@ -201,7 +204,13 @@
           <button class="btn" id="connBtn" style="min-width:auto">녹음 연결</button>
           <span class="rec-status" id="recStatus">미연결</span>
         </div>
-        <div class="rec-note">연결해두면 녹음 시간이 시작될 때 자동으로 녹음하고, 끝나면 mp3 파일이 저장됩니다. 시스템 사운드는 브라우저의 화면 공유 창에서 대상(탭 또는 전체 화면)을 고른 뒤 “오디오 공유(탭 소리)”를 반드시 켜야 소리가 잡힙니다.</div>
+        <div class="rec-row">
+          <span class="rec-label">저장 폴더</span>
+          <button class="btn ghost" id="folderBtn" style="min-width:auto">폴더 선택</button>
+          <button class="iconbtn" id="folderClear" title="저장 폴더 설정 해제" hidden>✕</button>
+          <span class="folder-status" id="folderStatus">브라우저 다운로드 폴더</span>
+        </div>
+        <div class="rec-note">저장 폴더를 한 번 선택하면 이후 녹음은 확인창 없이 그 폴더에 자동 저장됩니다. 폴더 권한이 만료되면 설정에서 다시 허용하세요. 시스템 사운드는 브라우저의 화면 공유 창에서 대상(탭 또는 전체 화면)을 고른 뒤 “오디오 공유(탭 소리)”를 반드시 켜야 소리가 잡힙니다.</div>
       </div>
       <div id="setRows"></div>
     </div>
@@ -547,6 +556,7 @@ a.length>D&&(D=a.length,p=0|1.25*D+7200,r=new Int8Array(p));a=u.lame_encode_buff
     recBtn:$('recBtn'),setBtn:$('setBtn'),mute:$('muteBtn'),vol:$('volRange'),float:$('floatBtn'),fs:$('fsBtn'),app:$('app'),
     overlay:$('overlay'),closeSet:$('closeSet'),setRows:$('setRows'),restore:$('restoreBtn'),
     conn:$('connBtn'),recStatus:$('recStatus'),micSelect:$('micSelect'),micRefresh:$('micRefresh'),
+    folderBtn:$('folderBtn'),folderClear:$('folderClear'),folderStatus:$('folderStatus'),
   };
   els.ring.style.strokeDasharray=CIRC;
 
@@ -611,6 +621,70 @@ a.length>D&&(D=a.length,p=0|1.25*D+7200,r=new Int8Array(p));a=u.lame_encode_buff
     els.recBtn.classList.toggle('armed', cap.armed);
     els.recBtn.title = cap.armed ? ('녹음 연결됨 · '+srcLabel()+' · 클릭하면 해제') : '응답 녹음 연결 (1~4)';
     if(els.conn) els.conn.textContent = cap.armed ? '연결 해제' : '녹음 연결';
+  }
+
+  // 선택한 저장 폴더 핸들은 IndexedDB에 보관한다. 브라우저는 보안상 전체 경로 문자열을 노출하지 않는다.
+  const DIR_DB='pte-timer-file-settings-v1', DIR_STORE='handles', DIR_KEY='recording-directory';
+  let saveDirectory=null;
+  function openDirDB(){
+    return new Promise((resolve,reject)=>{
+      if(!window.indexedDB) return reject(new Error('IndexedDB unavailable'));
+      const req=indexedDB.open(DIR_DB,1);
+      req.onupgradeneeded=()=>{ if(!req.result.objectStoreNames.contains(DIR_STORE)) req.result.createObjectStore(DIR_STORE); };
+      req.onsuccess=()=>resolve(req.result); req.onerror=()=>reject(req.error);
+    });
+  }
+  async function readSavedDirectory(){
+    const db=await openDirDB();
+    try{ return await new Promise((resolve,reject)=>{ const r=db.transaction(DIR_STORE).objectStore(DIR_STORE).get(DIR_KEY); r.onsuccess=()=>resolve(r.result||null); r.onerror=()=>reject(r.error); }); }
+    finally{ db.close(); }
+  }
+  async function storeSavedDirectory(handle){
+    const db=await openDirDB();
+    try{ await new Promise((resolve,reject)=>{ const s=db.transaction(DIR_STORE,'readwrite').objectStore(DIR_STORE), r=handle?s.put(handle,DIR_KEY):s.delete(DIR_KEY); r.onsuccess=()=>resolve(); r.onerror=()=>reject(r.error); }); }
+    finally{ db.close(); }
+  }
+  async function directoryPermission(){
+    if(!saveDirectory) return 'none';
+    try{ return await saveDirectory.queryPermission({mode:'readwrite'}); }catch(e){ return 'prompt'; }
+  }
+  async function refreshFolderUI(){
+    if(!('showDirectoryPicker' in window)){
+      els.folderBtn.disabled=true; els.folderClear.hidden=true;
+      els.folderStatus.textContent='이 브라우저에서는 자동 저장 미지원'; els.folderStatus.classList.remove('on'); return;
+    }
+    const permission=await directoryPermission();
+    els.folderBtn.disabled=false; els.folderClear.hidden=!saveDirectory;
+    els.folderBtn.textContent=!saveDirectory?'폴더 선택':permission==='granted'?'폴더 변경':'권한 다시 허용';
+    els.folderStatus.textContent=!saveDirectory?'브라우저 다운로드 폴더':permission==='granted'?`자동 저장 · ${saveDirectory.name}`:`권한 확인 필요 · ${saveDirectory.name}`;
+    els.folderStatus.classList.toggle('on',permission==='granted');
+  }
+  async function chooseSaveDirectory(){
+    try{
+      if(saveDirectory && (await directoryPermission())!=='granted'){
+        const permission=await saveDirectory.requestPermission({mode:'readwrite'});
+        if(permission==='granted'){ await storeSavedDirectory(saveDirectory); await refreshFolderUI(); return; }
+      }
+      saveDirectory=await window.showDirectoryPicker({id:'pte-timer-recordings',mode:'readwrite',startIn:'downloads'});
+      if((await saveDirectory.requestPermission({mode:'readwrite'}))!=='granted') throw new Error('write permission denied');
+      await storeSavedDirectory(saveDirectory); await refreshFolderUI();
+    }catch(e){ if(e.name!=='AbortError'){ els.folderStatus.textContent='폴더 설정 실패 · 다시 시도하세요'; els.folderStatus.classList.remove('on'); } }
+  }
+  async function clearSaveDirectory(){
+    saveDirectory=null; try{ await storeSavedDirectory(null); }catch(e){} await refreshFolderUI();
+  }
+  async function loadSavedDirectory(){
+    try{ saveDirectory=await readSavedDirectory(); }catch(e){ saveDirectory=null; }
+    await refreshFolderUI();
+  }
+  async function saveFile(blob,name){
+    if(saveDirectory && (await directoryPermission())==='granted'){
+      try{
+        const handle=await saveDirectory.getFileHandle(name,{create:true}), writer=await handle.createWritable();
+        await writer.write(blob); await writer.close(); return true;
+      }catch(e){ els.folderStatus.textContent='자동 저장 실패 · 다운로드 폴더로 저장'; els.folderStatus.classList.remove('on'); }
+    }else if(saveDirectory){ refreshFolderUI(); }
+    download(blob,name); return false;
   }
   const micConstraint=()=>{ const id=els.micSelect && els.micSelect.value; return id ? {deviceId:{exact:id}} : true; };
   async function refreshMics(prime){
@@ -705,11 +779,12 @@ a.length>D&&(D=a.length,p=0|1.25*D+7200,r=new Int8Array(p));a=u.lame_encode_buff
         const buf=await blob.arrayBuffer();
         const ctx=new (window.AudioContext||window.webkitAudioContext)();
         const audio=await ctx.decodeAudioData(buf); ctx.close();
-        download(encodeMp3(audio), base+'.mp3');
-        flashStatus('저장됨 · '+base+'.mp3'); return;
+        const name=base+'.mp3', direct=await saveFile(encodeMp3(audio),name);
+        flashStatus((direct?'자동 저장됨 · ':'다운로드됨 · ')+name); return;
       }
     }catch(e){}
-    download(blob, base+'.webm'); flashStatus('저장됨 (webm)');
+    const name=base+'.webm', direct=await saveFile(blob,name);
+    flashStatus((direct?'자동 저장됨 · ':'다운로드됨 · ')+name);
   }
   function encodeMp3(audio){
     const sr=audio.sampleRate, n=audio.length;
@@ -854,7 +929,7 @@ a.length>D&&(D=a.length,p=0|1.25*D+7200,r=new Int8Array(p));a=u.lame_encode_buff
     m.onclick=()=>upd(-cfg.step); p.onclick=()=>upd(cfg.step);
     return seg;
   }
-  function openSettings(){ buildSettings(); els.overlay.hidden=false; }
+  function openSettings(){ buildSettings(); els.overlay.hidden=false; refreshFolderUI(); }
   function closeSettings(){ els.overlay.hidden=true; }
 
   els.start.onclick=toggle;
@@ -872,6 +947,8 @@ a.length>D&&(D=a.length,p=0|1.25*D+7200,r=new Int8Array(p));a=u.lame_encode_buff
   els.conn.onclick=()=>{ cap.armed ? disconnectCapture() : connectCapture(); };
   els.micRefresh.onclick=()=>refreshMics(true);
   els.micSelect.onchange=()=>{ if(cap.armed && cap.src!=='system') disconnectCapture(); };
+  els.folderBtn.onclick=chooseSaveDirectory;
+  els.folderClear.onclick=clearSaveDirectory;
   document.querySelectorAll('input[name=capsrc]').forEach(r=> r.onchange=()=>{ if(cap.armed) disconnectCapture(); });
   if(navigator.mediaDevices && navigator.mediaDevices.addEventListener) navigator.mediaDevices.addEventListener('devicechange', ()=>refreshMics());
 
@@ -912,7 +989,7 @@ a.length>D&&(D=a.length,p=0|1.25*D+7200,r=new Int8Array(p));a=u.lame_encode_buff
     else if('1234567'.includes(k)){ const key=ORDER.find(x=>TASKS[x].key===k); if(key) selectTask(key); }
   });
 
-  buildPicker(); updateMuteIcon(); updateRecUI(); refreshMics(); selectTask('read');
+  buildPicker(); updateMuteIcon(); updateRecUI(); refreshMics(); loadSavedDirectory(); selectTask('read');
 })();
 </script>
 </body>
