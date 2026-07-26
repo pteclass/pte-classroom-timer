@@ -929,7 +929,6 @@ a.length>D&&(D=a.length,p=0|1.25*D+7200,r=new Int8Array(p));a=u.lame_encode_buff
     els.pickerLabel.textContent=TASKS[k].full?`${TASKS[k].name} · ${TASKS[k].full}`:TASKS[k].name;
     els.app.dataset.task=k;
     els.app.dataset.recordable=TASKS[k].recordable?'true':'false';
-    if(!TASKS[k].recordable && cap.armed) disconnectCapture();
     [...els.pickerMenu.children].forEach(b=>b.classList.toggle('on', b.dataset.k===k));
     resetTimer(false); buildPlan();
   }
