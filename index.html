@@ -30,6 +30,7 @@
   .iconbtn:hover{color:var(--text);border-color:var(--accent)}
   .iconbtn[hidden]{display:none}
   #recBtn.armed{border-color:var(--record);color:var(--record)}
+  .app[data-recordable="false"] #recBtn{display:none}
 
   .vol{display:flex;align-items:center;gap:8px;background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:0 10px 0 4px;height:34px}
   .vol .iconbtn{border:none;background:transparent;width:30px}
@@ -188,7 +189,7 @@
   </div>
 
   <div class="hint">
-    <kbd>Space</kbd> 시작·정지 &nbsp; <kbd>R</kbd> 리셋 &nbsp; <kbd>N</kbd> 다음 &nbsp; <kbd>0–7</kbd> 과목 &nbsp; <kbd>,</kbd> 설정 &nbsp; <kbd>S</kbd> 음소거 &nbsp; <kbd>F</kbd> 전체화면
+    <kbd>Space</kbd> 시작·정지 &nbsp; <kbd>R</kbd> 리셋 &nbsp; <kbd>N</kbd> 다음 &nbsp; <kbd>0–8</kbd> 과목 &nbsp; <kbd>,</kbd> 설정 &nbsp; <kbd>S</kbd> 음소거 &nbsp; <kbd>F</kbd> 전체화면
   </div>
 </div>
 
@@ -543,20 +544,21 @@ a.length>D&&(D=a.length,p=0|1.25*D+7200,r=new Int8Array(p));a=u.lame_encode_buff
 <script>
 (() => {
   const TASKS = {
-    general:  { name:'일반 녹음', file:'GeneralRecording', key:'0', mode:'free', step:1 },
-    read:     { name:'Read Aloud',           key:'1', mode:'two',    step:5 },
-    image:    { name:'Describe Image',        key:'2', mode:'two',    step:5 },
-    retell:   { name:'Retell Lecture',        key:'3', mode:'two',    step:5 },
-    group:    { name:'Group Discussion',      key:'4', mode:'two',    step:5 },
+    general:  { name:'일반 녹음', file:'GeneralRecording', key:'0', mode:'free', step:1, recordable:true },
+    read:     { name:'Read Aloud',           key:'1', mode:'two',    step:5, recordable:true },
+    image:    { name:'Describe Image',        key:'2', mode:'two',    step:5, recordable:true },
+    retell:   { name:'Retell Lecture',        key:'3', mode:'two',    step:5, recordable:true },
+    group:    { name:'Group Discussion',      key:'4', mode:'two',    step:5, recordable:true },
     dictation:{ name:'Write from Dictation',  key:'5', mode:'single', step:5,  big:'WRITE',     sub:'받아쓰기' },
     swt:      { name:'SWT', full:'Summarize Written Text', key:'6', mode:'single', step:30, big:'SUMMARIZE', sub:'요약문 작성 · SWT' },
     sst:      { name:'SST', full:'Summarize Spoken Text',  key:'7', mode:'single', step:30, big:'SUMMARIZE', sub:'요약문 작성 · SST' },
+    essay:    { name:'Essay', key:'8', mode:'single', step:30, big:'WRITE', sub:'에세이 작성' },
   };
-  const ORDER = ['general','read','image','retell','group','dictation','swt','sst'];
+  const ORDER = ['general','read','image','retell','group','dictation','swt','sst','essay'];
   const BUILTIN = {
     general:{},
     read:{prep:40,record:40}, image:{prep:25,record:40}, retell:{prep:10,record:40},
-    group:{prep:10,record:120}, dictation:{seconds:20}, swt:{seconds:540}, sst:{seconds:540},
+    group:{prep:10,record:120}, dictation:{seconds:20}, swt:{seconds:540}, sst:{seconds:540}, essay:{seconds:1080},
   };
   const STORE='pte-timer-defaults-v1';
   const R=46, CIRC=2*Math.PI*R;
@@ -924,6 +926,8 @@ a.length>D&&(D=a.length,p=0|1.25*D+7200,r=new Int8Array(p));a=u.lame_encode_buff
     els.pickerNum.textContent=TASKS[k].key;
     els.pickerLabel.textContent=TASKS[k].full?`${TASKS[k].name} · ${TASKS[k].full}`:TASKS[k].name;
     els.app.dataset.task=k;
+    els.app.dataset.recordable=TASKS[k].recordable?'true':'false';
+    if(!TASKS[k].recordable && cap.armed) disconnectCapture();
     [...els.pickerMenu.children].forEach(b=>b.classList.toggle('on', b.dataset.k===k));
     resetTimer(false); buildPlan();
   }
@@ -1100,7 +1104,7 @@ a.length>D&&(D=a.length,p=0|1.25*D+7200,r=new Int8Array(p));a=u.lame_encode_buff
     else if(k==='p'){ if(!els.float.hidden) els.float.click(); }
     else if(k==='s'){ els.mute.click(); }
     else if(k===','){ openSettings(); }
-    else if('01234567'.includes(k)){ const key=ORDER.find(x=>TASKS[x].key===k); if(key) selectTask(key); }
+    else if('012345678'.includes(k)){ const key=ORDER.find(x=>TASKS[x].key===k); if(key) selectTask(key); }
   });
 
   buildPicker(); updateMuteIcon(); updateRecUI(); refreshMics(); loadSavedDirectory(); selectTask('read');
