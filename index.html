@@ -31,6 +31,7 @@
   .iconbtn[hidden]{display:none}
   #recBtn.armed{border-color:var(--record);color:var(--record)}
   .app[data-recordable="false"] #recBtn{display:none}
+  .app[data-recordable="false"] #finishRecordBtn,.app[data-recordable="false"] #saveNotice{display:none!important}
 
   .vol{display:flex;align-items:center;gap:8px;background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:0 10px 0 4px;height:34px}
   .vol .iconbtn{border:none;background:transparent;width:30px}
@@ -831,6 +832,7 @@ a.length>D&&(D=a.length,p=0|1.25*D+7200,r=new Int8Array(p));a=u.lame_encode_buff
     updateRecUI();
   }
   function startRecording(){
+    if(!t().recordable) return;
     if(!cap.armed || !cap.stream){ showSaveNotice('녹음이 연결되지 않았습니다 · 상단의 흰색 원 버튼을 눌러 녹음을 연결하세요','error',12000); return; }
     if(typeof MediaRecorder==='undefined'){ showSaveNotice('이 브라우저에서는 녹음을 사용할 수 없습니다','error',12000); return; }
     try{
@@ -992,7 +994,7 @@ a.length>D&&(D=a.length,p=0|1.25*D+7200,r=new Int8Array(p));a=u.lame_encode_buff
     }
   }
   function finishRecordingNow(){
-    if(phase!=='record') return;
+    if(!t().recordable || phase!=='record') return;
     if(!cap.armed || !cap.rec || cap.rec.state==='inactive'){
       flashStatus('저장할 녹음이 없습니다 · 먼저 녹음 연결을 해주세요',12000);
       showSaveNotice('저장할 녹음이 없습니다 · 상단의 흰색 원 버튼을 눌러 녹음을 연결하세요','error',12000);
