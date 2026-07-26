@@ -207,6 +207,7 @@
         <div class="rec-row">
           <span class="rec-label">저장 폴더</span>
           <button class="btn ghost" id="folderBtn" style="min-width:auto">폴더 선택</button>
+          <button class="btn ghost" id="folderTest" style="min-width:auto" disabled>MP3 저장 테스트</button>
           <button class="iconbtn" id="folderClear" title="저장 폴더 설정 해제" hidden>✕</button>
           <span class="folder-status" id="folderStatus">브라우저 다운로드 폴더</span>
         </div>
@@ -556,7 +557,7 @@ a.length>D&&(D=a.length,p=0|1.25*D+7200,r=new Int8Array(p));a=u.lame_encode_buff
     recBtn:$('recBtn'),setBtn:$('setBtn'),mute:$('muteBtn'),vol:$('volRange'),float:$('floatBtn'),fs:$('fsBtn'),app:$('app'),
     overlay:$('overlay'),closeSet:$('closeSet'),setRows:$('setRows'),restore:$('restoreBtn'),
     conn:$('connBtn'),recStatus:$('recStatus'),micSelect:$('micSelect'),micRefresh:$('micRefresh'),
-    folderBtn:$('folderBtn'),folderClear:$('folderClear'),folderStatus:$('folderStatus'),
+    folderBtn:$('folderBtn'),folderTest:$('folderTest'),folderClear:$('folderClear'),folderStatus:$('folderStatus'),
   };
   els.ring.style.strokeDasharray=CIRC;
 
@@ -612,9 +613,9 @@ a.length>D&&(D=a.length,p=0|1.25*D+7200,r=new Int8Array(p));a=u.lame_encode_buff
   const cap={armed:false, src:'system', stream:null, sources:[], mixCtx:null, note:'', rec:null, chunks:[], discard:false, statusTimer:null};
   const srcLabel=()=> cap.src==='mic' ? '마이크' : cap.src==='both' ? '시스템+마이크' : '시스템 사운드';
   function setStatus(txt,on){ if(els.recStatus){ els.recStatus.textContent=txt; els.recStatus.classList.toggle('on',!!on);} }
-  function flashStatus(txt){
+  function flashStatus(txt,delay=4500){
     setStatus(txt, cap.armed); clearTimeout(cap.statusTimer);
-    cap.statusTimer=setTimeout(()=> setStatus(cap.armed?('연결됨 · '+srcLabel()):'미연결', cap.armed), 4500);
+    cap.statusTimer=setTimeout(()=> setStatus(cap.armed?('연결됨 · '+srcLabel()):'미연결', cap.armed), delay);
   }
   function updateRecUI(){
     els.recBtn.textContent = cap.armed ? '🔴' : '⚪';
@@ -650,11 +651,11 @@ a.length>D&&(D=a.length,p=0|1.25*D+7200,r=new Int8Array(p));a=u.lame_encode_buff
   }
   async function refreshFolderUI(){
     if(!('showDirectoryPicker' in window)){
-      els.folderBtn.disabled=true; els.folderClear.hidden=true;
+      els.folderBtn.disabled=true; els.folderTest.disabled=true; els.folderClear.hidden=true;
       els.folderStatus.textContent='이 브라우저에서는 자동 저장 미지원'; els.folderStatus.classList.remove('on'); return;
     }
     const permission=await directoryPermission();
-    els.folderBtn.disabled=false; els.folderClear.hidden=!saveDirectory;
+    els.folderBtn.disabled=false; els.folderTest.disabled=permission!=='granted'; els.folderClear.hidden=!saveDirectory;
     els.folderBtn.textContent=!saveDirectory?'폴더 선택':permission==='granted'?'폴더 변경':'권한 다시 허용';
     els.folderStatus.textContent=!saveDirectory?'브라우저 다운로드 폴더':permission==='granted'?`자동 저장 · ${saveDirectory.name}`:`권한 확인 필요 · ${saveDirectory.name}`;
     els.folderStatus.classList.toggle('on',permission==='granted');
@@ -677,14 +678,70 @@ a.length>D&&(D=a.length,p=0|1.25*D+7200,r=new Int8Array(p));a=u.lame_encode_buff
     try{ saveDirectory=await readSavedDirectory(); }catch(e){ saveDirectory=null; }
     await refreshFolderUI();
   }
+  function saveErrorText(error){
+    const names={
+      NotAllowedError:'폴더 쓰기 권한 없음', SecurityError:'브라우저 보안 제한',
+      NotFoundError:'저장 폴더를 찾을 수 없음', NoModificationAllowedError:'읽기 전용 폴더',
+      QuotaExceededError:'저장 공간 부족'
+    };
+    return names[error&&error.name] || (error&&error.message) || '알 수 없는 파일 쓰기 오류';
+  }
+  async function writeToSaveDirectory(blob,name){
+    if(!saveDirectory) return {ok:false,reason:'not-set'};
+    const permission=await directoryPermission();
+    if(permission!=='granted') return {ok:false,reason:'permission',error:new DOMException('폴더 권한을 다시 허용하세요','NotAllowedError')};
+    let writer=null;
+    try{
+      const handle=await saveDirectory.getFileHandle(name,{create:true});
+      writer=await handle.createWritable();
+      await writer.write(blob); await writer.close(); writer=null;
+      const saved=await handle.getFile();
+      if(saved.size!==blob.size) throw new Error(`파일 크기 검증 실패 (${saved.size}/${blob.size} bytes)`);
+      return {ok:true,size:saved.size};
+    }catch(error){
+      if(writer){ try{ await writer.abort(); }catch(e){} }
+      return {ok:false,reason:'write',error};
+    }
+  }
   async function saveFile(blob,name){
-    if(saveDirectory && (await directoryPermission())==='granted'){
-      try{
-        const handle=await saveDirectory.getFileHandle(name,{create:true}), writer=await handle.createWritable();
-        await writer.write(blob); await writer.close(); return true;
-      }catch(e){ els.folderStatus.textContent='자동 저장 실패 · 다운로드 폴더로 저장'; els.folderStatus.classList.remove('on'); }
-    }else if(saveDirectory){ refreshFolderUI(); }
-    download(blob,name); return false;
+    if(saveDirectory){
+      const result=await writeToSaveDirectory(blob,name);
+      if(result.ok){
+        els.folderStatus.textContent=`저장 완료 · ${name} · ${Math.max(1,Math.round(result.size/1024))} KB`;
+        els.folderStatus.classList.add('on');
+        return {direct:true,fallback:false};
+      }
+      const reason=saveErrorText(result.error);
+      els.folderStatus.textContent=`자동 저장 실패 · ${reason} · 다운로드 폴더에 백업`;
+      els.folderStatus.classList.remove('on');
+      download(blob,name);
+      return {direct:false,fallback:true,error:result.error};
+    }
+    download(blob,name); return {direct:false,fallback:false};
+  }
+  function makeTestMp3(){
+    const sampleRate=44100, samples=new Int16Array(Math.round(sampleRate*0.25));
+    const encoder=new lamejs.Mp3Encoder(1,sampleRate,128), parts=[], block=1152;
+    for(let i=0;i<samples.length;i+=block){ const part=encoder.encodeBuffer(samples.subarray(i,i+block)); if(part.length) parts.push(part); }
+    const last=encoder.flush(); if(last.length) parts.push(last);
+    return new Blob(parts,{type:'audio/mpeg'});
+  }
+  async function testSaveDirectory(){
+    if(!saveDirectory) return;
+    els.folderTest.disabled=true;
+    els.folderStatus.textContent='MP3 테스트 파일 저장 중…'; els.folderStatus.classList.remove('on');
+    try{
+      const name=`PTE_Save_Test_${stamp()}.mp3`, blob=makeTestMp3();
+      if(!blob.size) throw new Error('MP3 생성 실패');
+      const result=await writeToSaveDirectory(blob,name);
+      if(!result.ok) throw result.error||new Error('파일 쓰기 실패');
+      els.folderStatus.textContent=`저장 테스트 성공 · ${name} · ${Math.max(1,Math.round(result.size/1024))} KB`;
+      els.folderStatus.classList.add('on');
+    }catch(error){
+      els.folderStatus.textContent=`저장 테스트 실패 · ${saveErrorText(error)}`;
+      els.folderStatus.classList.remove('on');
+    }
+    els.folderTest.disabled=(await directoryPermission())!=='granted';
   }
   const micConstraint=()=>{ const id=els.micSelect && els.micSelect.value; return id ? {deviceId:{exact:id}} : true; };
   async function refreshMics(prime){
@@ -757,14 +814,16 @@ a.length>D&&(D=a.length,p=0|1.25*D+7200,r=new Int8Array(p));a=u.lame_encode_buff
       const mime = MediaRecorder.isTypeSupported('audio/webm') ? 'audio/webm' : '';
       const rec = new MediaRecorder(cap.stream, mime?{mimeType:mime}:undefined);
       rec.ondataavailable=e=>{ if(e.data && e.data.size) cap.chunks.push(e.data); };
+      rec.onerror=e=>{ console.error('Recording failed',e.error||e); flashStatus('녹음 오류 · 녹음 연결을 다시 해주세요',12000); };
       rec.onstop=()=>{
         const chunks=cap.chunks; cap.chunks=[];
-        if(cap.discard || !chunks.length) return;
+        if(cap.discard) return;
+        if(!chunks.length){ flashStatus('저장 실패 · 녹음 데이터가 없습니다',12000); return; }
         saveRecording(new Blob(chunks,{type:rec.mimeType||'audio/webm'}));
       };
-      cap.rec=rec; rec.start();
+      cap.rec=rec; rec.start(1000);
       els.phaseSub.textContent='녹음 중 · mp3 기록';
-    }catch(e){}
+    }catch(error){ console.error('Recording start failed',error); flashStatus(`녹음 시작 실패 · ${error.name||'장치 오류'}`,12000); }
   }
   function stopRecording(save){
     const rec=cap.rec;
@@ -779,12 +838,14 @@ a.length>D&&(D=a.length,p=0|1.25*D+7200,r=new Int8Array(p));a=u.lame_encode_buff
         const buf=await blob.arrayBuffer();
         const ctx=new (window.AudioContext||window.webkitAudioContext)();
         const audio=await ctx.decodeAudioData(buf); ctx.close();
-        const name=base+'.mp3', direct=await saveFile(encodeMp3(audio),name);
-        flashStatus((direct?'자동 저장됨 · ':'다운로드됨 · ')+name); return;
+        const mp3=encodeMp3(audio);
+        if(!mp3.size) throw new Error('MP3 인코딩 결과가 비어 있습니다');
+        const name=base+'.mp3', result=await saveFile(mp3,name);
+        flashStatus(result.direct?('자동 저장 완료 · '+name):result.fallback?'폴더 저장 실패 · 다운로드 폴더에 MP3 백업됨':('다운로드됨 · '+name),result.fallback?12000:6500); return;
       }
-    }catch(e){}
-    const name=base+'.webm', direct=await saveFile(blob,name);
-    flashStatus((direct?'자동 저장됨 · ':'다운로드됨 · ')+name);
+    }catch(error){ console.error('MP3 conversion failed',error); }
+    const name=base+'.webm', result=await saveFile(blob,name);
+    flashStatus(result.direct?'MP3 변환 실패 · WebM 자동 저장됨':result.fallback?'MP3 변환·폴더 저장 실패 · 다운로드 폴더에 WebM 백업됨':'MP3 변환 실패 · WebM 다운로드됨',12000);
   }
   function encodeMp3(audio){
     const sr=audio.sampleRate, n=audio.length;
@@ -948,6 +1009,7 @@ a.length>D&&(D=a.length,p=0|1.25*D+7200,r=new Int8Array(p));a=u.lame_encode_buff
   els.micRefresh.onclick=()=>refreshMics(true);
   els.micSelect.onchange=()=>{ if(cap.armed && cap.src!=='system') disconnectCapture(); };
   els.folderBtn.onclick=chooseSaveDirectory;
+  els.folderTest.onclick=testSaveDirectory;
   els.folderClear.onclick=clearSaveDirectory;
   document.querySelectorAll('input[name=capsrc]').forEach(r=> r.onchange=()=>{ if(cap.armed) disconnectCapture(); });
   if(navigator.mediaDevices && navigator.mediaDevices.addEventListener) navigator.mediaDevices.addEventListener('devicechange', ()=>refreshMics());
