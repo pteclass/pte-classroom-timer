@@ -96,6 +96,7 @@
   .btn.ghost:hover{color:var(--text)}
   .counter{display:flex;align-items:center;gap:8px;color:var(--muted);font-size:13px;margin-left:4px;cursor:pointer;user-select:none}
   .counter b{color:var(--text);font-size:16px;font-weight:700;font-variant-numeric:tabular-nums}
+  .app[data-task="general"] #nextBtn,.app[data-task="general"] #counter{display:none}
 
   .hint{text-align:center;color:var(--muted);font-size:11.5px;letter-spacing:.02em;opacity:.75}
   .hint kbd{background:var(--surface-2);border:1px solid var(--line);border-radius:5px;padding:1px 6px;font-size:11px;font-family:inherit;color:var(--text)}
@@ -187,7 +188,7 @@
   </div>
 
   <div class="hint">
-    <kbd>Space</kbd> 시작·정지 &nbsp; <kbd>R</kbd> 리셋 &nbsp; <kbd>N</kbd> 다음 &nbsp; <kbd>1–7</kbd> 과목 &nbsp; <kbd>,</kbd> 설정 &nbsp; <kbd>S</kbd> 음소거 &nbsp; <kbd>F</kbd> 전체화면
+    <kbd>Space</kbd> 시작·정지 &nbsp; <kbd>R</kbd> 리셋 &nbsp; <kbd>N</kbd> 다음 &nbsp; <kbd>0–7</kbd> 과목 &nbsp; <kbd>,</kbd> 설정 &nbsp; <kbd>S</kbd> 음소거 &nbsp; <kbd>F</kbd> 전체화면
   </div>
 </div>
 
@@ -542,6 +543,7 @@ a.length>D&&(D=a.length,p=0|1.25*D+7200,r=new Int8Array(p));a=u.lame_encode_buff
 <script>
 (() => {
   const TASKS = {
+    general:  { name:'일반 녹음', file:'GeneralRecording', key:'0', mode:'free', step:1 },
     read:     { name:'Read Aloud',           key:'1', mode:'two',    step:5 },
     image:    { name:'Describe Image',        key:'2', mode:'two',    step:5 },
     retell:   { name:'Retell Lecture',        key:'3', mode:'two',    step:5 },
@@ -550,8 +552,9 @@ a.length>D&&(D=a.length,p=0|1.25*D+7200,r=new Int8Array(p));a=u.lame_encode_buff
     swt:      { name:'SWT', full:'Summarize Written Text', key:'6', mode:'single', step:30, big:'SUMMARIZE', sub:'요약문 작성 · SWT' },
     sst:      { name:'SST', full:'Summarize Spoken Text',  key:'7', mode:'single', step:30, big:'SUMMARIZE', sub:'요약문 작성 · SST' },
   };
-  const ORDER = ['read','image','retell','group','dictation','swt','sst'];
+  const ORDER = ['general','read','image','retell','group','dictation','swt','sst'];
   const BUILTIN = {
+    general:{},
     read:{prep:40,record:40}, image:{prep:25,record:40}, retell:{prep:10,record:40},
     group:{prep:10,record:120}, dictation:{seconds:20}, swt:{seconds:540}, sst:{seconds:540},
   };
@@ -592,7 +595,7 @@ a.length>D&&(D=a.length,p=0|1.25*D+7200,r=new Int8Array(p));a=u.lame_encode_buff
   const fmtSeg=v=> v<60 ? v+'s' : fmt(v);
   function setAccent(v){ document.documentElement.style.setProperty('--accent', `var(${v})`); }
   const accentColor=()=>getComputedStyle(document.documentElement).getPropertyValue('--accent');
-  const firstDuration=()=> t().mode==='single' ? cur.seconds : cur.prep;
+  const firstDuration=()=> t().mode==='free' ? 0 : t().mode==='single' ? cur.seconds : cur.prep;
 
   // ---- audio beep ----
   let actx=null;
@@ -850,7 +853,8 @@ a.length>D&&(D=a.length,p=0|1.25*D+7200,r=new Int8Array(p));a=u.lame_encode_buff
     cap.rec=null;
   }
   async function saveRecording(blob){
-    const base=`PTE_${TASKS[taskKey].name.replace(/[^A-Za-z0-9]+/g,'')}_Q${qnum}_${stamp()}`;
+    const task=TASKS[taskKey], fileLabel=task.file||task.name.replace(/[^A-Za-z0-9]+/g,'');
+    const base=task.mode==='free'?`PTE_${fileLabel}_${stamp()}`:`PTE_${fileLabel}_Q${qnum}_${stamp()}`;
     flashStatus('mp3 저장 중…');
     showSaveNotice('MP3 파일을 만드는 중…','pending');
     try{
@@ -900,7 +904,10 @@ a.length>D&&(D=a.length,p=0|1.25*D+7200,r=new Int8Array(p));a=u.lame_encode_buff
   function closePicker(){ els.pickerMenu.hidden=true; els.pickerBtn.setAttribute('aria-expanded','false'); els.picker.classList.remove('open'); }
   function buildPlan(){
     els.plan.innerHTML='';
-    if(t().mode==='single'){ els.plan.appendChild(planSeg('시간','seconds', phase==='single'||phase==='idle')); }
+    if(t().mode==='free'){
+      const seg=document.createElement('div'); seg.className='seg active'; seg.innerHTML='<span class="lbl">녹음</span><b>시간 제한 없음</b>'; els.plan.appendChild(seg);
+    }
+    else if(t().mode==='single'){ els.plan.appendChild(planSeg('시간','seconds', phase==='single'||phase==='idle')); }
     else{ els.plan.appendChild(planSeg('준비','prep', phase==='prep'||phase==='idle')); els.plan.appendChild(planSeg('녹음','record', phase==='record')); }
   }
   function planSeg(label,field,active){
@@ -916,6 +923,7 @@ a.length>D&&(D=a.length,p=0|1.25*D+7200,r=new Int8Array(p));a=u.lame_encode_buff
     taskKey=k; cur=curClone();
     els.pickerNum.textContent=TASKS[k].key;
     els.pickerLabel.textContent=TASKS[k].full?`${TASKS[k].name} · ${TASKS[k].full}`:TASKS[k].name;
+    els.app.dataset.task=k;
     [...els.pickerMenu.children].forEach(b=>b.classList.toggle('on', b.dataset.k===k));
     resetTimer(false); buildPlan();
   }
@@ -935,7 +943,8 @@ a.length>D&&(D=a.length,p=0|1.25*D+7200,r=new Int8Array(p));a=u.lame_encode_buff
     unlockAudio();
     if(phase==='idle'||phase==='done'){
       resetTimer(false);
-      if(t().mode==='single') startPhase('single', cur.seconds);
+      if(t().mode==='free') startPhase('record',Infinity);
+      else if(t().mode==='single') startPhase('single', cur.seconds);
       else startPhase('prep', cur.prep);
     }else{
       running=true; startAt=performance.now();
@@ -955,6 +964,9 @@ a.length>D&&(D=a.length,p=0|1.25*D+7200,r=new Int8Array(p));a=u.lame_encode_buff
     cancelAnimationFrame(raf);
     const tick=()=>{
       const elapsed=accum+(performance.now()-startAt)/1000;
+      if(t().mode==='free'){
+        paintTimeElapsed(elapsed); setRing(1); raf=requestAnimationFrame(tick); return;
+      }
       let remaining=duration-elapsed;
       if(remaining<=0){ render(0); return advance(); }
       render(remaining); raf=requestAnimationFrame(tick);
@@ -963,13 +975,16 @@ a.length>D&&(D=a.length,p=0|1.25*D+7200,r=new Int8Array(p));a=u.lame_encode_buff
   }
   function advance(){
     cancelAnimationFrame(raf);
+    const finalElapsed=t().mode==='free'?accum+(running?(performance.now()-startAt)/1000:0):0;
     running=false;
     if(phase==='prep'){ beepRecord(); startPhase('record', cur.record); }
     else{
       stopRecording(true); beepDone(); phase='done'; setAccent('--done'); els.app.dataset.phase='done';
       els.phaseText.textContent='DONE'; els.phaseSub.textContent='종료';
       els.dot.style.background=accentColor();
-      paintTime(0); setRing(0); updateStartBtn(); buildPlan();
+      if(t().mode==='free'){ paintTimeElapsed(finalElapsed); setRing(1); }
+      else{ paintTime(0); setRing(0); }
+      updateStartBtn(); buildPlan();
     }
   }
   function finishRecordingNow(){
@@ -983,6 +998,7 @@ a.length>D&&(D=a.length,p=0|1.25*D+7200,r=new Int8Array(p));a=u.lame_encode_buff
     advance();
   }
   function paintTime(seconds){ const value=fmt(seconds); els.time.textContent=value; els.time.classList.toggle('long',value.length>4); }
+  function paintTimeElapsed(seconds){ const value=fmt(Math.floor(Math.max(0,seconds))); els.time.textContent=value; els.time.classList.toggle('long',value.length>4); }
   function render(remaining){ paintTime(remaining); setRing(duration>0?remaining/duration:0); }
   function setRing(frac){ els.ring.style.strokeDashoffset=CIRC*(1-Math.max(0,Math.min(1,frac))); }
 
@@ -997,7 +1013,7 @@ a.length>D&&(D=a.length,p=0|1.25*D+7200,r=new Int8Array(p));a=u.lame_encode_buff
     updateStartBtn(); buildPlan();
     if(startFresh) begin();
   }
-  function nextQuestion(){ qnum++; els.qnum.textContent=qnum; cur=curClone(); resetTimer(false); }
+  function nextQuestion(){ if(t().mode==='free'){ resetTimer(false); return; } qnum++; els.qnum.textContent=qnum; cur=curClone(); resetTimer(false); }
   function updateStartBtn(){
     els.start.textContent = running ? '⏸ 정지'
       : (phase==='prep'||phase==='record'||phase==='single') ? '▶ 계속' : '▶ 시작';
@@ -1009,7 +1025,8 @@ a.length>D&&(D=a.length,p=0|1.25*D+7200,r=new Int8Array(p));a=u.lame_encode_buff
       const cfg=TASKS[k], row=document.createElement('div'); row.className='set-row';
       const name=document.createElement('div'); name.className='set-name'; name.textContent=cfg.full?`${cfg.name} · ${cfg.full}`:cfg.name;
       const ctrls=document.createElement('div'); ctrls.className='set-ctrls';
-      if(cfg.mode==='single') ctrls.appendChild(setSeg(k,'시간','seconds'));
+      if(cfg.mode==='free'){ const note=document.createElement('span'); note.className='rec-label'; note.textContent='시간 제한 없음 · 완료 버튼으로 저장'; ctrls.appendChild(note); }
+      else if(cfg.mode==='single') ctrls.appendChild(setSeg(k,'시간','seconds'));
       else{ ctrls.appendChild(setSeg(k,'준비','prep')); ctrls.appendChild(setSeg(k,'녹음','record')); }
       row.appendChild(name); row.appendChild(ctrls); els.setRows.appendChild(row);
     });
@@ -1083,7 +1100,7 @@ a.length>D&&(D=a.length,p=0|1.25*D+7200,r=new Int8Array(p));a=u.lame_encode_buff
     else if(k==='p'){ if(!els.float.hidden) els.float.click(); }
     else if(k==='s'){ els.mute.click(); }
     else if(k===','){ openSettings(); }
-    else if('1234567'.includes(k)){ const key=ORDER.find(x=>TASKS[x].key===k); if(key) selectTask(key); }
+    else if('01234567'.includes(k)){ const key=ORDER.find(x=>TASKS[x].key===k); if(key) selectTask(key); }
   });
 
   buildPicker(); updateMuteIcon(); updateRecUI(); refreshMics(); loadSavedDirectory(); selectTask('read');
