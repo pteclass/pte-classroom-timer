@@ -75,6 +75,11 @@
   .finish-record{display:none;margin-top:2px;background:var(--record);border-color:var(--record);color:#fff;box-shadow:0 8px 24px rgba(255,75,75,.2)}
   .finish-record:hover{filter:brightness(1.08);border-color:var(--record)}
   .app[data-phase="record"] .finish-record{display:inline-flex}
+  .save-notice{max-width:min(560px,92vw);padding:9px 14px;border:1px solid var(--line);border-radius:10px;background:var(--surface);color:var(--muted);font-size:12px;text-align:center;line-height:1.45}
+  .save-notice[hidden]{display:none}
+  .save-notice.pending{color:var(--text);border-color:var(--record)}
+  .save-notice.success{color:var(--done);border-color:color-mix(in srgb,var(--done) 55%,var(--line))}
+  .save-notice.error{color:#ff9b9b;border-color:color-mix(in srgb,var(--record) 65%,var(--line))}
   .seg{display:flex;align-items:center;gap:6px;background:var(--surface);border:1px solid var(--line);border-radius:11px;padding:5px 6px 5px 12px;font-size:13px;color:var(--muted)}
   .seg.active{border-color:var(--accent);color:var(--text)}
   .seg b{font-weight:700;font-size:14px;min-width:54px;text-align:right;font-variant-numeric:tabular-nums}
@@ -171,6 +176,7 @@
     </div>
     <div class="plan" id="plan"></div>
     <button class="btn finish-record" id="finishRecordBtn" type="button" title="현재까지 녹음한 내용을 MP3로 저장">■ 완료 · MP3 저장</button>
+    <div class="save-notice" id="saveNotice" role="status" aria-live="polite" hidden></div>
   </div>
 
   <div class="controls">
@@ -556,7 +562,7 @@ a.length>D&&(D=a.length,p=0|1.25*D+7200,r=new Int8Array(p));a=u.lame_encode_buff
   const els={
     dot:$('dot'),phase:$('phase'),phaseText:$('phaseText'),phaseSub:$('phaseSub'),
     picker:$('picker'),pickerBtn:$('pickerBtn'),pickerMenu:$('pickerMenu'),pickerNum:$('pickerNum'),pickerLabel:$('pickerLabel'),
-    time:$('time'),ring:$('ringFill'),plan:$('plan'),finishRecord:$('finishRecordBtn'),
+    time:$('time'),ring:$('ringFill'),plan:$('plan'),finishRecord:$('finishRecordBtn'),saveNotice:$('saveNotice'),
     start:$('startBtn'),reset:$('resetBtn'),next:$('nextBtn'),qnum:$('qnum'),counter:$('counter'),
     recBtn:$('recBtn'),setBtn:$('setBtn'),mute:$('muteBtn'),vol:$('volRange'),float:$('floatBtn'),fs:$('fsBtn'),app:$('app'),
     overlay:$('overlay'),closeSet:$('closeSet'),setRows:$('setRows'),restore:$('restoreBtn'),
@@ -614,13 +620,21 @@ a.length>D&&(D=a.length,p=0|1.25*D+7200,r=new Int8Array(p));a=u.lame_encode_buff
   const beepDone  =()=>tone(660,0.36,'triangle');
 
   // ================= RESPONSE RECORDING (tasks 1-4) =================
-  const cap={armed:false, src:'system', stream:null, sources:[], mixCtx:null, note:'', rec:null, chunks:[], discard:false, statusTimer:null};
+  const cap={armed:false, src:'system', stream:null, sources:[], mixCtx:null, note:'', rec:null, chunks:[], discard:false, statusTimer:null,noticeTimer:null};
   const srcLabel=()=> cap.src==='mic' ? '마이크' : cap.src==='both' ? '시스템+마이크' : '시스템 사운드';
   function setStatus(txt,on){ if(els.recStatus){ els.recStatus.textContent=txt; els.recStatus.classList.toggle('on',!!on);} }
   function flashStatus(txt,delay=4500){
     setStatus(txt, cap.armed); clearTimeout(cap.statusTimer);
     cap.statusTimer=setTimeout(()=> setStatus(cap.armed?('연결됨 · '+srcLabel()):'미연결', cap.armed), delay);
   }
+  function showSaveNotice(txt,type='pending',delay=0){
+    clearTimeout(cap.noticeTimer);
+    els.saveNotice.textContent=txt;
+    els.saveNotice.className='save-notice '+type;
+    els.saveNotice.hidden=false;
+    if(delay>0) cap.noticeTimer=setTimeout(()=>{ els.saveNotice.hidden=true; },delay);
+  }
+  function clearSaveNotice(){ clearTimeout(cap.noticeTimer); els.saveNotice.hidden=true; }
   function updateRecUI(){
     els.recBtn.textContent = cap.armed ? '🔴' : '⚪';
     els.recBtn.classList.toggle('armed', cap.armed);
@@ -812,22 +826,23 @@ a.length>D&&(D=a.length,p=0|1.25*D+7200,r=new Int8Array(p));a=u.lame_encode_buff
     updateRecUI();
   }
   function startRecording(){
-    if(!cap.armed || !cap.stream || typeof MediaRecorder==='undefined') return;
+    if(!cap.armed || !cap.stream){ showSaveNotice('녹음이 연결되지 않았습니다 · 상단의 흰색 원 버튼을 눌러 녹음을 연결하세요','error',12000); return; }
+    if(typeof MediaRecorder==='undefined'){ showSaveNotice('이 브라우저에서는 녹음을 사용할 수 없습니다','error',12000); return; }
     try{
       cap.chunks=[]; cap.discard=false;
       const mime = MediaRecorder.isTypeSupported('audio/webm') ? 'audio/webm' : '';
       const rec = new MediaRecorder(cap.stream, mime?{mimeType:mime}:undefined);
       rec.ondataavailable=e=>{ if(e.data && e.data.size) cap.chunks.push(e.data); };
-      rec.onerror=e=>{ console.error('Recording failed',e.error||e); flashStatus('녹음 오류 · 녹음 연결을 다시 해주세요',12000); };
+      rec.onerror=e=>{ console.error('Recording failed',e.error||e); flashStatus('녹음 오류 · 녹음 연결을 다시 해주세요',12000); showSaveNotice('녹음 오류 · 녹음 연결을 다시 해주세요','error',12000); };
       rec.onstop=()=>{
         const chunks=cap.chunks; cap.chunks=[];
         if(cap.discard) return;
-        if(!chunks.length){ flashStatus('저장 실패 · 녹음 데이터가 없습니다',12000); return; }
+        if(!chunks.length){ flashStatus('저장 실패 · 녹음 데이터가 없습니다',12000); showSaveNotice('MP3 저장 실패 · 녹음 데이터가 없습니다','error',12000); return; }
         saveRecording(new Blob(chunks,{type:rec.mimeType||'audio/webm'}));
       };
       cap.rec=rec; rec.start(1000);
       els.phaseSub.textContent='녹음 중 · mp3 기록';
-    }catch(error){ console.error('Recording start failed',error); flashStatus(`녹음 시작 실패 · ${error.name||'장치 오류'}`,12000); }
+    }catch(error){ console.error('Recording start failed',error); flashStatus(`녹음 시작 실패 · ${error.name||'장치 오류'}`,12000); showSaveNotice(`녹음 시작 실패 · ${error.name||'장치 오류'}`,'error',12000); }
   }
   function stopRecording(save){
     const rec=cap.rec;
@@ -837,6 +852,7 @@ a.length>D&&(D=a.length,p=0|1.25*D+7200,r=new Int8Array(p));a=u.lame_encode_buff
   async function saveRecording(blob){
     const base=`PTE_${TASKS[taskKey].name.replace(/[^A-Za-z0-9]+/g,'')}_Q${qnum}_${stamp()}`;
     flashStatus('mp3 저장 중…');
+    showSaveNotice('MP3 파일을 만드는 중…','pending');
     try{
       if(window.lamejs && blob.size){
         const buf=await blob.arrayBuffer();
@@ -845,11 +861,13 @@ a.length>D&&(D=a.length,p=0|1.25*D+7200,r=new Int8Array(p));a=u.lame_encode_buff
         const mp3=encodeMp3(audio);
         if(!mp3.size) throw new Error('MP3 인코딩 결과가 비어 있습니다');
         const name=base+'.mp3', result=await saveFile(mp3,name);
-        flashStatus(result.direct?('자동 저장 완료 · '+name):result.fallback?'폴더 저장 실패 · 다운로드 폴더에 MP3 백업됨':('다운로드됨 · '+name),result.fallback?12000:6500); return;
+        const message=result.direct?('✓ MP3 저장 완료 · '+name):result.fallback?'폴더 저장 실패 · 다운로드 폴더에 MP3 백업됨':('MP3 다운로드 완료 · '+name);
+        flashStatus(message,result.fallback?12000:6500); showSaveNotice(message,result.fallback?'error':'success',12000); return;
       }
     }catch(error){ console.error('MP3 conversion failed',error); }
     const name=base+'.webm', result=await saveFile(blob,name);
-    flashStatus(result.direct?'MP3 변환 실패 · WebM 자동 저장됨':result.fallback?'MP3 변환·폴더 저장 실패 · 다운로드 폴더에 WebM 백업됨':'MP3 변환 실패 · WebM 다운로드됨',12000);
+    const message=result.direct?'MP3 변환 실패 · WebM 자동 저장됨':result.fallback?'MP3 변환·폴더 저장 실패 · 다운로드 폴더에 WebM 백업됨':'MP3 변환 실패 · WebM 다운로드됨';
+    flashStatus(message,12000); showSaveNotice(message,'error',12000);
   }
   function encodeMp3(audio){
     const sr=audio.sampleRate, n=audio.length;
@@ -958,8 +976,10 @@ a.length>D&&(D=a.length,p=0|1.25*D+7200,r=new Int8Array(p));a=u.lame_encode_buff
     if(phase!=='record') return;
     if(!cap.armed || !cap.rec || cap.rec.state==='inactive'){
       flashStatus('저장할 녹음이 없습니다 · 먼저 녹음 연결을 해주세요',12000);
+      showSaveNotice('저장할 녹음이 없습니다 · 상단의 흰색 원 버튼을 눌러 녹음을 연결하세요','error',12000);
       return;
     }
+    showSaveNotice('녹음을 종료하고 MP3로 저장하는 중…','pending');
     advance();
   }
   function paintTime(seconds){ const value=fmt(seconds); els.time.textContent=value; els.time.classList.toggle('long',value.length>4); }
@@ -968,6 +988,7 @@ a.length>D&&(D=a.length,p=0|1.25*D+7200,r=new Int8Array(p));a=u.lame_encode_buff
 
   function resetTimer(startFresh){
     stopRecording(false);
+    clearSaveNotice();
     cancelAnimationFrame(raf); running=false; phase='idle'; accum=0;
     setAccent('--idle'); els.app.dataset.phase='idle';
     els.phaseText.textContent='준비 완료'; els.phaseSub.textContent='시작을 누르세요';
