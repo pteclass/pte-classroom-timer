@@ -145,6 +145,7 @@
   @media (prefers-reduced-motion:reduce){*{animation:none!important}}
 
   .app[data-device="tablet"],.app[data-device="mobile"]{padding-left:max(14px,env(safe-area-inset-left));padding-right:max(14px,env(safe-area-inset-right));padding-bottom:max(14px,env(safe-area-inset-bottom))}
+  .app[data-device="tablet"] .finish-record,.app[data-device="mobile"] .finish-record{display:none!important}
   .app[data-device="tablet"] .device-badge{display:inline-flex}
   .app[data-device="tablet"] .iconbtn,.app[data-device="mobile"] .iconbtn{width:46px;height:44px;border-radius:12px}
   .app[data-device="tablet"] .picker-btn,.app[data-device="mobile"] .picker-btn{min-height:54px}
@@ -153,7 +154,7 @@
   .app[data-device="tablet"] .ring-wrap{width:min(44vh,58vw,500px)}
   .app[data-device="tablet"] .hint,.app[data-device="mobile"] .hint{font-size:12px}
   .app[data-device="tablet"] .hint kbd,.app[data-device="mobile"] .hint kbd{display:none}
-  .app[data-device="mobile"]{gap:9px;overflow:auto}
+  .app[data-device="mobile"]{flex:none;gap:12px;overflow:visible;height:auto;min-height:100dvh;padding-bottom:max(104px,calc(env(safe-area-inset-bottom) + 72px))}
   .app[data-device="mobile"] header{gap:7px;flex-wrap:nowrap}
   .app[data-device="mobile"] .brand{font-size:11px;letter-spacing:.11em}
   .app[data-device="mobile"] .vol{padding:0;height:44px}
@@ -161,13 +162,17 @@
   .app[data-device="mobile"] .picker{width:100%}
   .app[data-device="mobile"] .picker-label{font-size:15px}
   .app[data-device="mobile"] .pi-full{display:none}
-  .app[data-device="mobile"] .stage{justify-content:center;gap:8px;min-height:390px}
-  .app[data-device="mobile"] .ring-wrap{width:min(42vh,78vw,390px)}
+  .app[data-device="mobile"] .stage{flex:none;justify-content:flex-start;gap:9px;min-height:0;padding:8px 0}
+  .app[data-device="mobile"] .phase{font-size:clamp(22px,7vw,32px)}
+  .app[data-device="mobile"] .ring-wrap{width:min(34dvh,72vw,340px)}
+  .app[data-device="mobile"] .plan{width:100%;flex-wrap:nowrap}
+  .app[data-device="mobile"] .plan .seg{flex:1;min-width:0;padding-left:9px}
+  .app[data-device="mobile"] .plan .seg b{min-width:42px}
   .app[data-device="mobile"] .controls{display:grid;grid-template-columns:1fr 1fr 1fr;width:100%;gap:8px}
   .app[data-device="mobile"] .controls .btn{min-width:0;padding:11px 8px}
   .app[data-device="mobile"] .counter{grid-column:1/-1;justify-content:center;margin:0;min-height:36px}
   .app[data-device="mobile"][data-task="general"] .controls{grid-template-columns:1fr 1fr}
-  .app[data-device="mobile"] .finish-record{width:min(100%,320px)}
+  .app[data-device="mobile"] .save-result{width:min(100%,340px)}
   .app[data-device="mobile"] .hint{padding-bottom:2px}
   body[data-device="mobile"]{overflow:auto}
   body[data-device="mobile"] .overlay{align-items:flex-end;padding:0}
@@ -186,7 +191,7 @@
   }
 </style>
 </head>
-<body data-build="adaptive-device-v1">
+<body data-build="adaptive-device-v2">
 <div class="app" id="app">
   <header>
     <div class="brand"><span class="dot" id="dot"></span>PTE&nbsp;TIMER</div>
@@ -677,6 +682,7 @@ a.length>D&&(D=a.length,p=0|1.25*D+7200,r=new Int8Array(p));a=u.lame_encode_buff
     els.hint.textContent=activeDevice==='desktop'?'Space 시작·정지  ·  R 리셋  ·  N 다음  ·  0–8 과목  ·  , 설정  ·  S 음소거  ·  F 전체화면':'화면을 터치해 과목, 시작·정지, 완료 및 저장 기능을 사용하세요';
     els.fs.hidden=!document.documentElement.requestFullscreen;
     updateSourceOptions();
+    updateSaveAction();
     refreshFolderUI();
   }
 
@@ -747,6 +753,19 @@ a.length>D&&(D=a.length,p=0|1.25*D+7200,r=new Int8Array(p));a=u.lame_encode_buff
     clearTimeout(cap.noticeTimer);
     if(pendingSave) return;
     els.saveNotice.hidden=true; els.saveResult.classList.remove('ready');
+  }
+  function updateSaveAction(){
+    if(pendingSave){
+      const format=pendingSave.name.toLowerCase().endsWith('.mp3')?'MP3':'WebM';
+      els.saveResult.textContent=capabilities.fileShare?`${format}를 파일 앱에 저장 · 공유`:`${format} 다운로드`;
+      els.saveResult.classList.add('ready');
+      return;
+    }
+    const recording=!!(cap.rec&&cap.rec.state!=='inactive');
+    if((activeDevice==='mobile'||activeDevice==='tablet')&&recording){
+      els.saveResult.textContent='■ 녹음 완료';
+      els.saveResult.classList.add('ready');
+    }else els.saveResult.classList.remove('ready');
   }
   function updateRecUI(){
     els.recBtn.textContent = cap.armed ? '🔴' : '⚪';
@@ -851,9 +870,7 @@ a.length>D&&(D=a.length,p=0|1.25*D+7200,r=new Int8Array(p));a=u.lame_encode_buff
     }
     if(detectDevice()!=='desktop'){
       pendingSave={blob,name};
-      const format=name.toLowerCase().endsWith('.mp3')?'MP3':'WebM';
-      els.saveResult.textContent=capabilities.fileShare?`${format}를 파일 앱에 저장 · 공유`:`${format} 다운로드`;
-      els.saveResult.classList.add('ready');
+      updateSaveAction();
       return {direct:false,fallback:false,awaitingUser:true};
     }
     download(blob,name); return {direct:false,fallback:false,awaitingUser:false};
@@ -948,6 +965,7 @@ a.length>D&&(D=a.length,p=0|1.25*D+7200,r=new Int8Array(p));a=u.lame_encode_buff
   }
   function startRecording(){
     if(!t().recordable) return;
+    if(pendingSave){ showSaveNotice('이전 녹음 파일을 먼저 저장하세요','error'); updateSaveAction(); return; }
     if(!cap.armed || !cap.stream){ showSaveNotice('녹음이 연결되지 않았습니다 · 상단의 흰색 원 버튼을 눌러 녹음을 연결하세요','error',12000); return; }
     if(typeof MediaRecorder==='undefined'){ showSaveNotice('이 브라우저에서는 녹음을 사용할 수 없습니다','error',12000); return; }
     try{
@@ -962,14 +980,14 @@ a.length>D&&(D=a.length,p=0|1.25*D+7200,r=new Int8Array(p));a=u.lame_encode_buff
         if(!chunks.length){ flashStatus('저장 실패 · 녹음 데이터가 없습니다',12000); showSaveNotice('MP3 저장 실패 · 녹음 데이터가 없습니다','error',12000); return; }
         saveRecording(new Blob(chunks,{type:rec.mimeType||'audio/webm'}));
       };
-      cap.rec=rec; rec.start(1000);
+      cap.rec=rec; rec.start(1000); updateSaveAction();
       els.phaseSub.textContent='녹음 중 · mp3 기록';
     }catch(error){ console.error('Recording start failed',error); flashStatus(`녹음 시작 실패 · ${error.name||'장치 오류'}`,12000); showSaveNotice(`녹음 시작 실패 · ${error.name||'장치 오류'}`,'error',12000); }
   }
   function stopRecording(save){
     const rec=cap.rec;
     if(rec && rec.state!=='inactive'){ cap.discard=!save; try{ rec.stop(); }catch(e){} }
-    cap.rec=null;
+    cap.rec=null; updateSaveAction();
   }
   async function saveRecording(blob){
     const task=TASKS[taskKey], fileLabel=task.file||task.name.replace(/[^A-Za-z0-9]+/g,'');
@@ -1011,7 +1029,7 @@ a.length>D&&(D=a.length,p=0|1.25*D+7200,r=new Int8Array(p));a=u.lame_encode_buff
     if(!pendingSave) return;
     const item=pendingSave;
     if(typeof File==='undefined'){
-      download(item.blob,item.name); pendingSave=null; els.saveResult.classList.remove('ready');
+      download(item.blob,item.name); pendingSave=null; updateSaveAction();
       showSaveNotice('다운로드로 저장했습니다 · '+item.name,'success',12000); return;
     }
     const file=new File([item.blob],item.name,{type:item.blob.type||'application/octet-stream'});
@@ -1019,11 +1037,11 @@ a.length>D&&(D=a.length,p=0|1.25*D+7200,r=new Int8Array(p));a=u.lame_encode_buff
       if(capabilities.fileShare&&(!navigator.canShare||navigator.canShare({files:[file]}))){
         await navigator.share({files:[file],title:item.name});
       }else download(item.blob,item.name);
-      pendingSave=null; els.saveResult.classList.remove('ready');
+      pendingSave=null; updateSaveAction();
       showSaveNotice('✓ 저장 메뉴로 전달 완료 · '+item.name,'success',12000);
     }catch(error){
       if(error&&error.name==='AbortError') showSaveNotice('저장이 취소되었습니다 · 버튼을 눌러 다시 저장할 수 있습니다','error');
-      else{ download(item.blob,item.name); pendingSave=null; els.saveResult.classList.remove('ready'); showSaveNotice('공유 기능을 사용할 수 없어 다운로드로 저장했습니다','success',12000); }
+      else{ download(item.blob,item.name); pendingSave=null; updateSaveAction(); showSaveNotice('공유 기능을 사용할 수 없어 다운로드로 저장했습니다','success',12000); }
     }
   }
   function stamp(){ const d=new Date(),p=x=>String(x).padStart(2,'0'); return `${d.getFullYear()}${p(d.getMonth()+1)}${p(d.getDate())}_${p(d.getHours())}${p(d.getMinutes())}${p(d.getSeconds())}`; }
@@ -1080,6 +1098,9 @@ a.length>D&&(D=a.length,p=0|1.25*D+7200,r=new Int8Array(p));a=u.lame_encode_buff
   function begin(){
     // 사용자 클릭/키 입력 시 오디오를 먼저 활성화해, 준비 시간이 끝난 뒤에도 비프음이 보장되게 한다.
     unlockAudio();
+    if(pendingSave&&t().recordable&&(phase==='idle'||phase==='done')){
+      showSaveNotice('이전 녹음 파일을 먼저 저장한 뒤 새 녹음을 시작하세요','error'); updateSaveAction(); return;
+    }
     if(phase==='idle'||phase==='done'){
       resetTimer(false);
       if(t().mode==='free') startPhase('record',Infinity);
@@ -1202,7 +1223,7 @@ a.length>D&&(D=a.length,p=0|1.25*D+7200,r=new Int8Array(p));a=u.lame_encode_buff
   els.folderBtn.onclick=chooseSaveDirectory;
   els.folderTest.onclick=testSaveDirectory;
   els.folderClear.onclick=clearSaveDirectory;
-  els.saveResult.onclick=savePendingFile;
+  els.saveResult.onclick=()=>{ if(cap.rec&&cap.rec.state!=='inactive') finishRecordingNow(); else savePendingFile(); };
   els.viewMode.onchange=()=>{ viewPreference=els.viewMode.value; try{localStorage.setItem(VIEW_STORE,viewPreference);}catch(e){} applyDeviceMode(); };
   document.querySelectorAll('input[name=capsrc]').forEach(r=> r.onchange=()=>{ if(cap.armed) disconnectCapture(); });
   if(navigator.mediaDevices && navigator.mediaDevices.addEventListener) navigator.mediaDevices.addEventListener('devicechange', ()=>refreshMics());
