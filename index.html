@@ -24,6 +24,7 @@
 
   header{display:flex;align-items:center;gap:10px;flex-wrap:wrap;z-index:2}
   .brand{display:flex;align-items:center;gap:9px;font-weight:700;letter-spacing:.16em;font-size:12px;color:var(--muted)}
+  .device-badge{display:none;border:1px solid var(--line);border-radius:999px;padding:5px 8px;color:var(--muted);font-size:10px;letter-spacing:.02em;white-space:nowrap}
   .dot{width:9px;height:9px;border-radius:3px;background:var(--accent);transition:background .3s}
   .spacer{flex:1}
   .iconbtn{width:38px;height:34px;border-radius:10px;border:1px solid var(--line);background:var(--surface);color:var(--muted);font-size:15px;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;transition:.15s}
@@ -31,7 +32,7 @@
   .iconbtn[hidden]{display:none}
   #recBtn.armed{border-color:var(--record);color:var(--record)}
   .app[data-recordable="false"] #recBtn{display:none}
-  .app[data-recordable="false"] #finishRecordBtn,.app[data-recordable="false"] #saveNotice{display:none!important}
+  .app[data-recordable="false"] #finishRecordBtn,.app[data-recordable="false"] #saveNotice,.app[data-recordable="false"] #saveResultBtn{display:none!important}
 
   .vol{display:flex;align-items:center;gap:8px;background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:0 10px 0 4px;height:34px}
   .vol .iconbtn{border:none;background:transparent;width:30px}
@@ -82,6 +83,8 @@
   .save-notice.pending{color:var(--text);border-color:var(--record)}
   .save-notice.success{color:var(--done);border-color:color-mix(in srgb,var(--done) 55%,var(--line))}
   .save-notice.error{color:#ff9b9b;border-color:color-mix(in srgb,var(--record) 65%,var(--line))}
+  .save-result{display:none;background:var(--done);border-color:var(--done);color:var(--ink);min-width:210px}
+  .save-result.ready{display:inline-flex}
   .seg{display:flex;align-items:center;gap:6px;background:var(--surface);border:1px solid var(--line);border-radius:11px;padding:5px 6px 5px 12px;font-size:13px;color:var(--muted)}
   .seg.active{border-color:var(--accent);color:var(--text)}
   .seg b{font-weight:700;font-size:14px;min-width:54px;text-align:right;font-variant-numeric:tabular-nums}
@@ -91,6 +94,7 @@
 
   .controls{display:flex;align-items:center;justify-content:center;gap:10px;flex-wrap:wrap;z-index:2}
   .btn{border:1px solid var(--line);background:var(--surface);color:var(--text);padding:12px 22px;border-radius:13px;font-size:15px;font-weight:600;cursor:pointer;display:inline-flex;align-items:center;gap:8px;transition:.15s;min-width:118px;justify-content:center}
+  .btn[hidden]{display:none}
   .btn:hover{border-color:var(--accent)}
   .btn.primary{background:var(--accent);color:var(--ink);border-color:var(--accent);font-weight:700}
   .btn.primary:hover{filter:brightness(1.07)}
@@ -131,22 +135,62 @@
   .mic-select{background:var(--surface-2);color:var(--text);border:1px solid var(--line);border-radius:9px;padding:7px 9px;font-family:inherit;font-size:13px;max-width:230px;flex:1}
   .mic-select:focus{outline:none;border-color:var(--accent)}
   #micRefresh{width:34px}
+  .view-box{padding:13px 0;border-bottom:1px solid var(--line)}
+  .view-row{display:flex;align-items:center;justify-content:space-between;gap:12px}
+  .view-select{background:var(--surface-2);color:var(--text);border:1px solid var(--line);border-radius:9px;padding:9px 34px 9px 11px;font-family:inherit;font-size:13px}
+  .device-status{font-size:11px;color:var(--muted);margin-top:8px;line-height:1.5}
+  .source-unavailable{display:none!important}
 
   @keyframes pulse{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.45;transform:scale(1.12)}}
   @media (prefers-reduced-motion:reduce){*{animation:none!important}}
 
-  @media (max-width:520px){
-    .btn{min-width:96px;padding:11px 14px;font-size:14px}
-    .vol input[type=range]{width:60px}
-    .picker-label{font-size:15px}
-    .set-row{flex-direction:column;align-items:flex-start;gap:8px}
+  .app[data-device="tablet"],.app[data-device="mobile"]{padding-left:max(14px,env(safe-area-inset-left));padding-right:max(14px,env(safe-area-inset-right));padding-bottom:max(14px,env(safe-area-inset-bottom))}
+  .app[data-device="tablet"] .device-badge{display:inline-flex}
+  .app[data-device="tablet"] .iconbtn,.app[data-device="mobile"] .iconbtn{width:46px;height:44px;border-radius:12px}
+  .app[data-device="tablet"] .picker-btn,.app[data-device="mobile"] .picker-btn{min-height:54px}
+  .app[data-device="tablet"] .picker-item,.app[data-device="mobile"] .picker-item{min-height:50px}
+  .app[data-device="tablet"] .btn,.app[data-device="mobile"] .btn{min-height:48px}
+  .app[data-device="tablet"] .ring-wrap{width:min(44vh,58vw,500px)}
+  .app[data-device="tablet"] .hint,.app[data-device="mobile"] .hint{font-size:12px}
+  .app[data-device="tablet"] .hint kbd,.app[data-device="mobile"] .hint kbd{display:none}
+  .app[data-device="mobile"]{gap:9px;overflow:auto}
+  .app[data-device="mobile"] header{gap:7px;flex-wrap:nowrap}
+  .app[data-device="mobile"] .brand{font-size:11px;letter-spacing:.11em}
+  .app[data-device="mobile"] .vol{padding:0;height:44px}
+  .app[data-device="mobile"] .vol input[type=range]{display:none}
+  .app[data-device="mobile"] .picker{width:100%}
+  .app[data-device="mobile"] .picker-label{font-size:15px}
+  .app[data-device="mobile"] .pi-full{display:none}
+  .app[data-device="mobile"] .stage{justify-content:center;gap:8px;min-height:390px}
+  .app[data-device="mobile"] .ring-wrap{width:min(42vh,78vw,390px)}
+  .app[data-device="mobile"] .controls{display:grid;grid-template-columns:1fr 1fr 1fr;width:100%;gap:8px}
+  .app[data-device="mobile"] .controls .btn{min-width:0;padding:11px 8px}
+  .app[data-device="mobile"] .counter{grid-column:1/-1;justify-content:center;margin:0;min-height:36px}
+  .app[data-device="mobile"][data-task="general"] .controls{grid-template-columns:1fr 1fr}
+  .app[data-device="mobile"] .finish-record{width:min(100%,320px)}
+  .app[data-device="mobile"] .hint{padding-bottom:2px}
+  body[data-device="mobile"]{overflow:auto}
+  body[data-device="mobile"] .overlay{align-items:flex-end;padding:0}
+  body[data-device="mobile"] .panel{width:100%;max-height:92dvh;border-radius:18px 18px 0 0;padding-bottom:env(safe-area-inset-bottom)}
+  body[data-device="mobile"] .rows{padding-left:15px;padding-right:15px}
+  body[data-device="mobile"] .set-row{flex-direction:column;align-items:flex-start;gap:8px}
+  body[data-device="mobile"] .set-ctrls{width:100%}
+  body[data-device="mobile"] .seg{flex:1;justify-content:space-between;padding-left:10px}
+  body[data-device="mobile"] .rec-row{gap:9px}
+  body[data-device="mobile"] .folder-status{white-space:normal;flex-basis:100%}
+  @media (orientation:landscape) and (max-height:560px){
+    .app[data-device="mobile"],.app[data-device="tablet"]{gap:5px;padding-top:8px}
+    .app[data-device="mobile"] .stage,.app[data-device="tablet"] .stage{min-height:0}
+    .app[data-device="mobile"] .ring-wrap,.app[data-device="tablet"] .ring-wrap{width:min(48vh,34vw,270px)}
+    .app[data-device="mobile"] .hint,.app[data-device="tablet"] .hint{display:none}
   }
 </style>
 </head>
-<body data-build="recording-feedback-v2">
+<body data-build="adaptive-device-v1">
 <div class="app" id="app">
   <header>
     <div class="brand"><span class="dot" id="dot"></span>PTE&nbsp;TIMER</div>
+    <span class="device-badge" id="deviceBadge">자동</span>
     <div class="spacer"></div>
     <button class="iconbtn" id="recBtn" title="응답 녹음 연결 (1~4)">⚪</button>
     <button class="iconbtn" id="setBtn" title="기본 시간 설정 (,)">⚙</button>
@@ -180,6 +224,7 @@
     <div class="plan" id="plan"></div>
     <button class="btn finish-record" id="finishRecordBtn" type="button" title="현재까지 녹음한 내용을 MP3로 저장">■ 완료 · MP3 저장</button>
     <div class="save-notice" id="saveNotice" role="status" aria-live="polite" hidden></div>
+    <button class="btn save-result" id="saveResultBtn" type="button">MP3를 파일 앱에 저장</button>
   </div>
 
   <div class="controls">
@@ -189,7 +234,7 @@
     <div class="counter" id="counter" title="클릭하면 1번으로">문항 <b id="qnum">1</b></div>
   </div>
 
-  <div class="hint">
+  <div class="hint" id="hint">
     <kbd>Space</kbd> 시작·정지 &nbsp; <kbd>R</kbd> 리셋 &nbsp; <kbd>N</kbd> 다음 &nbsp; <kbd>0–8</kbd> 과목 &nbsp; <kbd>,</kbd> 설정 &nbsp; <kbd>S</kbd> 음소거 &nbsp; <kbd>F</kbd> 전체화면
   </div>
 </div>
@@ -201,12 +246,24 @@
       <button class="iconbtn" id="closeSet">✕</button>
     </div>
     <div class="rows">
+      <div class="view-box">
+        <div class="view-row">
+          <div class="set-name">화면 모드</div>
+          <select class="view-select" id="viewModeSelect" aria-label="화면 모드">
+            <option value="auto">자동 감지</option>
+            <option value="desktop">데스크톱</option>
+            <option value="tablet">태블릿</option>
+            <option value="mobile">모바일</option>
+          </select>
+        </div>
+        <div class="device-status" id="deviceStatus"></div>
+      </div>
       <div class="rec-box">
         <div class="rec-title">응답 녹음 · mp3 저장<span class="rec-sub">Read Aloud · Describe Image · Retell · Group Discussion 의 녹음 시간</span></div>
         <div class="rec-row">
-          <label class="radio"><input type="radio" name="capsrc" value="system" checked> 시스템 사운드</label>
+          <label class="radio" id="systemSourceOption"><input type="radio" name="capsrc" value="system" checked> 시스템 사운드</label>
           <label class="radio"><input type="radio" name="capsrc" value="mic"> 마이크</label>
-          <label class="radio"><input type="radio" name="capsrc" value="both"> 시스템+마이크</label>
+          <label class="radio" id="bothSourceOption"><input type="radio" name="capsrc" value="both"> 시스템+마이크</label>
         </div>
         <div class="rec-row" id="micRow">
           <span class="rec-label">마이크 장치</span>
@@ -224,7 +281,7 @@
           <button class="iconbtn" id="folderClear" title="저장 폴더 설정 해제" hidden>✕</button>
           <span class="folder-status" id="folderStatus">브라우저 다운로드 폴더</span>
         </div>
-        <div class="rec-note">저장 폴더를 한 번 선택하면 이후 녹음은 확인창 없이 그 폴더에 자동 저장됩니다. 폴더 권한이 만료되면 설정에서 다시 허용하세요. 시스템 사운드는 브라우저의 화면 공유 창에서 대상(탭 또는 전체 화면)을 고른 뒤 “오디오 공유(탭 소리)”를 반드시 켜야 소리가 잡힙니다.</div>
+        <div class="rec-note" id="recNote">저장 폴더를 한 번 선택하면 이후 녹음은 확인창 없이 그 폴더에 자동 저장됩니다. 폴더 권한이 만료되면 설정에서 다시 허용하세요. 시스템 사운드는 브라우저의 화면 공유 창에서 대상(탭 또는 전체 화면)을 고른 뒤 “오디오 공유(탭 소리)”를 반드시 켜야 소리가 잡힙니다.</div>
       </div>
       <div id="setRows"></div>
     </div>
@@ -568,14 +625,60 @@ a.length>D&&(D=a.length,p=0|1.25*D+7200,r=new Int8Array(p));a=u.lame_encode_buff
   const els={
     dot:$('dot'),phase:$('phase'),phaseText:$('phaseText'),phaseSub:$('phaseSub'),
     picker:$('picker'),pickerBtn:$('pickerBtn'),pickerMenu:$('pickerMenu'),pickerNum:$('pickerNum'),pickerLabel:$('pickerLabel'),
-    time:$('time'),ring:$('ringFill'),plan:$('plan'),finishRecord:$('finishRecordBtn'),saveNotice:$('saveNotice'),
+    time:$('time'),ring:$('ringFill'),plan:$('plan'),finishRecord:$('finishRecordBtn'),saveNotice:$('saveNotice'),saveResult:$('saveResultBtn'),
     start:$('startBtn'),reset:$('resetBtn'),next:$('nextBtn'),qnum:$('qnum'),counter:$('counter'),
     recBtn:$('recBtn'),setBtn:$('setBtn'),mute:$('muteBtn'),vol:$('volRange'),float:$('floatBtn'),fs:$('fsBtn'),app:$('app'),
     overlay:$('overlay'),closeSet:$('closeSet'),setRows:$('setRows'),restore:$('restoreBtn'),
     conn:$('connBtn'),recStatus:$('recStatus'),micSelect:$('micSelect'),micRefresh:$('micRefresh'),
     folderBtn:$('folderBtn'),folderTest:$('folderTest'),folderClear:$('folderClear'),folderStatus:$('folderStatus'),
+    viewMode:$('viewModeSelect'),deviceStatus:$('deviceStatus'),deviceBadge:$('deviceBadge'),hint:$('hint'),
+    systemSource:$('systemSourceOption'),bothSource:$('bothSourceOption'),recNote:$('recNote'),
   };
   els.ring.style.strokeDasharray=CIRC;
+
+  const VIEW_STORE='pte-timer-view-mode-v1';
+  const capabilities={
+    directory:'showDirectoryPicker' in window,
+    displayAudio:!!(navigator.mediaDevices&&navigator.mediaDevices.getDisplayMedia),
+    microphone:!!(navigator.mediaDevices&&navigator.mediaDevices.getUserMedia),
+    recorder:typeof MediaRecorder!=='undefined',
+    fileShare:typeof navigator.share==='function'&&typeof File!=='undefined'
+  };
+  let viewPreference='auto', activeDevice='desktop', pendingSave=null;
+  try{ viewPreference=localStorage.getItem(VIEW_STORE)||'auto'; }catch(e){}
+  if(!['auto','desktop','tablet','mobile'].includes(viewPreference)) viewPreference='auto';
+  function detectDevice(){
+    const coarse=matchMedia('(pointer:coarse)').matches||navigator.maxTouchPoints>1;
+    const shortSide=Math.min(screen.width||window.innerWidth,screen.height||window.innerHeight);
+    if(window.innerWidth<=600||(coarse&&shortSide<=600)) return 'mobile';
+    if(coarse||window.innerWidth<=1024) return 'tablet';
+    return 'desktop';
+  }
+  function updateSourceOptions(){
+    const unavailable=!capabilities.displayAudio;
+    els.systemSource.classList.toggle('source-unavailable',unavailable);
+    els.bothSource.classList.toggle('source-unavailable',unavailable);
+    if(unavailable){
+      const chosen=document.querySelector('input[name=capsrc]:checked');
+      if(!chosen||chosen.value!=='mic') document.querySelector('input[name=capsrc][value=mic]').checked=true;
+      if(cap.armed&&cap.src!=='mic') disconnectCapture();
+      els.recNote.textContent='이 기기에서는 마이크 녹음을 사용합니다. 녹음이 끝나면 “MP3를 파일 앱에 저장” 버튼을 눌러 파일 앱, iCloud Drive 또는 공유할 앱을 선택하세요.';
+    }else{
+      els.recNote.textContent='저장 폴더를 한 번 선택하면 이후 녹음은 확인창 없이 그 폴더에 자동 저장됩니다. 폴더 권한이 만료되면 설정에서 다시 허용하세요. 시스템 사운드는 브라우저의 화면 공유 창에서 대상(탭 또는 전체 화면)을 고른 뒤 “오디오 공유(탭 소리)”를 반드시 켜야 소리가 잡힙니다.';
+    }
+  }
+  function applyDeviceMode(){
+    activeDevice=viewPreference==='auto'?detectDevice():viewPreference;
+    els.app.dataset.device=activeDevice; document.body.dataset.device=activeDevice;
+    els.viewMode.value=viewPreference;
+    const labels={desktop:'데스크톱',tablet:'태블릿',mobile:'모바일'};
+    els.deviceBadge.textContent=labels[activeDevice]+' 모드';
+    els.deviceStatus.textContent=(viewPreference==='auto'?'자동 감지':'수동 선택')+' · '+labels[activeDevice]+' 화면 · '+(capabilities.directory?'지정 폴더 자동 저장 가능':'완료 후 파일 앱/공유 메뉴로 저장');
+    els.hint.textContent=activeDevice==='desktop'?'Space 시작·정지  ·  R 리셋  ·  N 다음  ·  0–8 과목  ·  , 설정  ·  S 음소거  ·  F 전체화면':'화면을 터치해 과목, 시작·정지, 완료 및 저장 기능을 사용하세요';
+    els.fs.hidden=!document.documentElement.requestFullscreen;
+    updateSourceOptions();
+    refreshFolderUI();
+  }
 
   function loadDefaults(){
     const d=JSON.parse(JSON.stringify(BUILTIN));
@@ -640,7 +743,11 @@ a.length>D&&(D=a.length,p=0|1.25*D+7200,r=new Int8Array(p));a=u.lame_encode_buff
     els.saveNotice.hidden=false;
     if(delay>0) cap.noticeTimer=setTimeout(()=>{ els.saveNotice.hidden=true; },delay);
   }
-  function clearSaveNotice(){ clearTimeout(cap.noticeTimer); els.saveNotice.hidden=true; }
+  function clearSaveNotice(){
+    clearTimeout(cap.noticeTimer);
+    if(pendingSave) return;
+    els.saveNotice.hidden=true; els.saveResult.classList.remove('ready');
+  }
   function updateRecUI(){
     els.recBtn.textContent = cap.armed ? '🔴' : '⚪';
     els.recBtn.classList.toggle('armed', cap.armed);
@@ -674,10 +781,11 @@ a.length>D&&(D=a.length,p=0|1.25*D+7200,r=new Int8Array(p));a=u.lame_encode_buff
     try{ return await saveDirectory.queryPermission({mode:'readwrite'}); }catch(e){ return 'prompt'; }
   }
   async function refreshFolderUI(){
-    if(!('showDirectoryPicker' in window)){
-      els.folderBtn.disabled=true; els.folderTest.disabled=true; els.folderClear.hidden=true;
-      els.folderStatus.textContent='이 브라우저에서는 자동 저장 미지원'; els.folderStatus.classList.remove('on'); return;
+    if(!capabilities.directory){
+      els.folderBtn.hidden=true; els.folderTest.hidden=true; els.folderClear.hidden=true;
+      els.folderStatus.textContent='녹음 완료 후 파일 앱 · iCloud Drive · 공유 메뉴로 저장'; els.folderStatus.classList.remove('on'); return;
     }
+    els.folderBtn.hidden=false; els.folderTest.hidden=false;
     const permission=await directoryPermission();
     els.folderBtn.disabled=false; els.folderTest.disabled=permission!=='granted'; els.folderClear.hidden=!saveDirectory;
     els.folderBtn.textContent=!saveDirectory?'폴더 선택':permission==='granted'?'폴더 변경':'권한 다시 허용';
@@ -741,7 +849,14 @@ a.length>D&&(D=a.length,p=0|1.25*D+7200,r=new Int8Array(p));a=u.lame_encode_buff
       download(blob,name);
       return {direct:false,fallback:true,error:result.error};
     }
-    download(blob,name); return {direct:false,fallback:false};
+    if(detectDevice()!=='desktop'){
+      pendingSave={blob,name};
+      const format=name.toLowerCase().endsWith('.mp3')?'MP3':'WebM';
+      els.saveResult.textContent=capabilities.fileShare?`${format}를 파일 앱에 저장 · 공유`:`${format} 다운로드`;
+      els.saveResult.classList.add('ready');
+      return {direct:false,fallback:false,awaitingUser:true};
+    }
+    download(blob,name); return {direct:false,fallback:false,awaitingUser:false};
   }
   function makeTestMp3(){
     const sampleRate=44100, samples=new Int16Array(Math.round(sampleRate*0.25));
@@ -869,13 +984,13 @@ a.length>D&&(D=a.length,p=0|1.25*D+7200,r=new Int8Array(p));a=u.lame_encode_buff
         const mp3=encodeMp3(audio);
         if(!mp3.size) throw new Error('MP3 인코딩 결과가 비어 있습니다');
         const name=base+'.mp3', result=await saveFile(mp3,name);
-        const message=result.direct?('✓ MP3 저장 완료 · '+name):result.fallback?'폴더 저장 실패 · 다운로드 폴더에 MP3 백업됨':('MP3 다운로드 완료 · '+name);
-        flashStatus(message,result.fallback?12000:6500); showSaveNotice(message,result.fallback?'error':'success',12000); return;
+        const message=result.direct?('✓ MP3 저장 완료 · '+name):result.fallback?'폴더 저장 실패 · 다운로드 폴더에 MP3 백업됨':result.awaitingUser?'MP3 준비 완료 · 아래 저장 버튼을 누르세요':('MP3 다운로드 완료 · '+name);
+        flashStatus(message,result.fallback?12000:result.awaitingUser?30000:6500); showSaveNotice(message,result.fallback?'error':'success',result.awaitingUser?0:12000); return;
       }
     }catch(error){ console.error('MP3 conversion failed',error); }
     const name=base+'.webm', result=await saveFile(blob,name);
-    const message=result.direct?'MP3 변환 실패 · WebM 자동 저장됨':result.fallback?'MP3 변환·폴더 저장 실패 · 다운로드 폴더에 WebM 백업됨':'MP3 변환 실패 · WebM 다운로드됨';
-    flashStatus(message,12000); showSaveNotice(message,'error',12000);
+    const message=result.direct?'MP3 변환 실패 · WebM 자동 저장됨':result.fallback?'MP3 변환·폴더 저장 실패 · 다운로드 폴더에 WebM 백업됨':result.awaitingUser?'MP3 변환 실패 · 아래 버튼으로 WebM 파일을 저장하세요':'MP3 변환 실패 · WebM 다운로드됨';
+    flashStatus(message,12000); showSaveNotice(message,'error',result.awaitingUser?0:12000);
   }
   function encodeMp3(audio){
     const sr=audio.sampleRate, n=audio.length;
@@ -891,6 +1006,25 @@ a.length>D&&(D=a.length,p=0|1.25*D+7200,r=new Int8Array(p));a=u.lame_encode_buff
     const u=URL.createObjectURL(blob), a=document.createElement('a');
     a.href=u; a.download=name; document.body.appendChild(a); a.click(); a.remove();
     setTimeout(()=>URL.revokeObjectURL(u),4000);
+  }
+  async function savePendingFile(){
+    if(!pendingSave) return;
+    const item=pendingSave;
+    if(typeof File==='undefined'){
+      download(item.blob,item.name); pendingSave=null; els.saveResult.classList.remove('ready');
+      showSaveNotice('다운로드로 저장했습니다 · '+item.name,'success',12000); return;
+    }
+    const file=new File([item.blob],item.name,{type:item.blob.type||'application/octet-stream'});
+    try{
+      if(capabilities.fileShare&&(!navigator.canShare||navigator.canShare({files:[file]}))){
+        await navigator.share({files:[file],title:item.name});
+      }else download(item.blob,item.name);
+      pendingSave=null; els.saveResult.classList.remove('ready');
+      showSaveNotice('✓ 저장 메뉴로 전달 완료 · '+item.name,'success',12000);
+    }catch(error){
+      if(error&&error.name==='AbortError') showSaveNotice('저장이 취소되었습니다 · 버튼을 눌러 다시 저장할 수 있습니다','error');
+      else{ download(item.blob,item.name); pendingSave=null; els.saveResult.classList.remove('ready'); showSaveNotice('공유 기능을 사용할 수 없어 다운로드로 저장했습니다','success',12000); }
+    }
   }
   function stamp(){ const d=new Date(),p=x=>String(x).padStart(2,'0'); return `${d.getFullYear()}${p(d.getMonth()+1)}${p(d.getDate())}_${p(d.getHours())}${p(d.getMinutes())}${p(d.getSeconds())}`; }
   // =================================================================
@@ -1068,6 +1202,8 @@ a.length>D&&(D=a.length,p=0|1.25*D+7200,r=new Int8Array(p));a=u.lame_encode_buff
   els.folderBtn.onclick=chooseSaveDirectory;
   els.folderTest.onclick=testSaveDirectory;
   els.folderClear.onclick=clearSaveDirectory;
+  els.saveResult.onclick=savePendingFile;
+  els.viewMode.onchange=()=>{ viewPreference=els.viewMode.value; try{localStorage.setItem(VIEW_STORE,viewPreference);}catch(e){} applyDeviceMode(); };
   document.querySelectorAll('input[name=capsrc]').forEach(r=> r.onchange=()=>{ if(cap.armed) disconnectCapture(); });
   if(navigator.mediaDevices && navigator.mediaDevices.addEventListener) navigator.mediaDevices.addEventListener('devicechange', ()=>refreshMics());
 
@@ -1108,7 +1244,10 @@ a.length>D&&(D=a.length,p=0|1.25*D+7200,r=new Int8Array(p));a=u.lame_encode_buff
     else if('012345678'.includes(k)){ const key=ORDER.find(x=>TASKS[x].key===k); if(key) selectTask(key); }
   });
 
-  buildPicker(); updateMuteIcon(); updateRecUI(); refreshMics(); loadSavedDirectory(); selectTask('read');
+  let resizeTimer=null;
+  window.addEventListener('resize',()=>{ if(viewPreference!=='auto') return; clearTimeout(resizeTimer); resizeTimer=setTimeout(applyDeviceMode,120); });
+
+  buildPicker(); updateMuteIcon(); updateRecUI(); applyDeviceMode(); refreshMics(); loadSavedDirectory(); selectTask('read');
 })();
 </script>
 </body>
