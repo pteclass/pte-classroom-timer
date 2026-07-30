@@ -96,6 +96,7 @@
   .btn{border:1px solid var(--line);background:var(--surface);color:var(--text);padding:12px 22px;border-radius:13px;font-size:15px;font-weight:600;cursor:pointer;display:inline-flex;align-items:center;gap:8px;transition:.15s;min-width:118px;justify-content:center}
   .btn[hidden]{display:none}
   .btn:hover{border-color:var(--accent)}
+  .btn:disabled{opacity:.55;cursor:not-allowed}
   .btn.primary{background:var(--accent);color:var(--ink);border-color:var(--accent);font-weight:700}
   .btn.primary:hover{filter:brightness(1.07)}
   .btn.ghost{min-width:auto;padding:12px 16px;color:var(--muted);box-shadow:none}
@@ -191,7 +192,7 @@
   }
 </style>
 </head>
-<body data-build="adaptive-device-v2">
+<body data-build="continuous-session-v1">
 <div class="app" id="app">
   <header>
     <div class="brand"><span class="dot" id="dot"></span>PTE&nbsp;TIMER</div>
@@ -236,7 +237,7 @@
     <button class="btn primary" id="startBtn">▶ 시작</button>
     <button class="btn ghost" id="resetBtn">↻ 리셋</button>
     <button class="btn ghost" id="nextBtn">다음 ›</button>
-    <div class="counter" id="counter" title="클릭하면 1번으로">문항 <b id="qnum">1</b></div>
+    <div class="counter" id="counter" title="클릭하면 1번으로">문항 <b id="qnum">1</b><span id="qtotalWrap"> / <b id="qtotal">1</b></span></div>
   </div>
 
   <div class="hint" id="hint">
@@ -620,8 +621,8 @@ a.length>D&&(D=a.length,p=0|1.25*D+7200,r=new Int8Array(p));a=u.lame_encode_buff
   const ORDER = ['general','read','image','retell','group','dictation','swt','sst','essay'];
   const BUILTIN = {
     general:{},
-    read:{prep:40,record:40}, image:{prep:25,record:40}, retell:{prep:10,record:40},
-    group:{prep:10,record:120}, dictation:{seconds:20}, swt:{seconds:540}, sst:{seconds:540}, essay:{seconds:1080},
+    read:{prep:40,record:40,questions:1}, image:{prep:25,record:40,questions:1}, retell:{prep:10,record:40,questions:1},
+    group:{prep:10,record:120,questions:1}, dictation:{seconds:20}, swt:{seconds:540}, sst:{seconds:540}, essay:{seconds:1080},
   };
   const STORE='pte-timer-defaults-v1';
   const R=46, CIRC=2*Math.PI*R;
@@ -631,7 +632,7 @@ a.length>D&&(D=a.length,p=0|1.25*D+7200,r=new Int8Array(p));a=u.lame_encode_buff
     dot:$('dot'),phase:$('phase'),phaseText:$('phaseText'),phaseSub:$('phaseSub'),
     picker:$('picker'),pickerBtn:$('pickerBtn'),pickerMenu:$('pickerMenu'),pickerNum:$('pickerNum'),pickerLabel:$('pickerLabel'),
     time:$('time'),ring:$('ringFill'),plan:$('plan'),finishRecord:$('finishRecordBtn'),saveNotice:$('saveNotice'),saveResult:$('saveResultBtn'),
-    start:$('startBtn'),reset:$('resetBtn'),next:$('nextBtn'),qnum:$('qnum'),counter:$('counter'),
+    start:$('startBtn'),reset:$('resetBtn'),next:$('nextBtn'),qnum:$('qnum'),qtotal:$('qtotal'),qtotalWrap:$('qtotalWrap'),counter:$('counter'),
     recBtn:$('recBtn'),setBtn:$('setBtn'),mute:$('muteBtn'),vol:$('volRange'),float:$('floatBtn'),fs:$('fsBtn'),app:$('app'),
     overlay:$('overlay'),closeSet:$('closeSet'),setRows:$('setRows'),restore:$('restoreBtn'),
     conn:$('connBtn'),recStatus:$('recStatus'),micSelect:$('micSelect'),micRefresh:$('micRefresh'),
@@ -649,7 +650,7 @@ a.length>D&&(D=a.length,p=0|1.25*D+7200,r=new Int8Array(p));a=u.lame_encode_buff
     recorder:typeof MediaRecorder!=='undefined',
     fileShare:typeof navigator.share==='function'&&typeof File!=='undefined'
   };
-  let viewPreference='auto', activeDevice='desktop', pendingSave=null;
+  let viewPreference='auto', activeDevice='desktop', pendingSave=null, saveQueue=[];
   try{ viewPreference=localStorage.getItem(VIEW_STORE)||'auto'; }catch(e){}
   if(!['auto','desktop','tablet','mobile'].includes(viewPreference)) viewPreference='auto';
   function detectDevice(){
@@ -696,7 +697,7 @@ a.length>D&&(D=a.length,p=0|1.25*D+7200,r=new Int8Array(p));a=u.lame_encode_buff
   function saveDefaults(){ try{ localStorage.setItem(STORE, JSON.stringify(DEFAULTS)); }catch(e){} }
   let DEFAULTS=loadDefaults();
 
-  let taskKey='read', cur=null, phase='idle', running=false;
+  let taskKey='read', cur=null, phase='idle', running=false, sessionActive=false, autoNextTimer=null;
   let duration=0, startAt=0, accum=0, qnum=1, raf=null;
   let volume=0.8, muted=false;
 
@@ -708,6 +709,11 @@ a.length>D&&(D=a.length,p=0|1.25*D+7200,r=new Int8Array(p));a=u.lame_encode_buff
   function setAccent(v){ document.documentElement.style.setProperty('--accent', `var(${v})`); }
   const accentColor=()=>getComputedStyle(document.documentElement).getPropertyValue('--accent');
   const firstDuration=()=> t().mode==='free' ? 0 : t().mode==='single' ? cur.seconds : cur.prep;
+  const questionTotal=()=>t().mode==='two'?Math.max(1,cur.questions||1):1;
+  function updateCounter(){
+    els.qnum.textContent=qnum; els.qtotal.textContent=questionTotal();
+    els.qtotalWrap.hidden=t().mode!=='two';
+  }
 
   // ---- audio beep ----
   let actx=null;
@@ -755,17 +761,21 @@ a.length>D&&(D=a.length,p=0|1.25*D+7200,r=new Int8Array(p));a=u.lame_encode_buff
     els.saveNotice.hidden=true; els.saveResult.classList.remove('ready');
   }
   function updateSaveAction(){
-    if(pendingSave){
-      const format=pendingSave.name.toLowerCase().endsWith('.mp3')?'MP3':'WebM';
-      els.saveResult.textContent=capabilities.fileShare?`${format}를 파일 앱에 저장 · 공유`:`${format} 다운로드`;
-      els.saveResult.classList.add('ready');
-      return;
-    }
     const recording=!!(cap.rec&&cap.rec.state!=='inactive');
     if((activeDevice==='mobile'||activeDevice==='tablet')&&recording){
       els.saveResult.textContent='■ 녹음 완료';
       els.saveResult.classList.add('ready');
-    }else els.saveResult.classList.remove('ready');
+      return;
+    }
+    if(sessionActive){ els.saveResult.classList.remove('ready'); return; }
+    if(pendingSave){
+      const format=pendingSave.name.toLowerCase().endsWith('.mp3')?'MP3':'WebM';
+      const count=saveQueue.length>1?` (${saveQueue.length}개)`:'';
+      els.saveResult.textContent=capabilities.fileShare?`${format}를 파일 앱에 저장 · 공유${count}`:`${format} 다운로드${count}`;
+      els.saveResult.classList.add('ready');
+      return;
+    }
+    els.saveResult.classList.remove('ready');
   }
   function updateRecUI(){
     els.recBtn.textContent = cap.armed ? '🔴' : '⚪';
@@ -869,9 +879,9 @@ a.length>D&&(D=a.length,p=0|1.25*D+7200,r=new Int8Array(p));a=u.lame_encode_buff
       return {direct:false,fallback:true,error:result.error};
     }
     if(detectDevice()!=='desktop'){
-      pendingSave={blob,name};
+      saveQueue.push({blob,name}); pendingSave=saveQueue[0];
       updateSaveAction();
-      return {direct:false,fallback:false,awaitingUser:true};
+      return {direct:false,fallback:false,awaitingUser:true,queued:saveQueue.length};
     }
     download(blob,name); return {direct:false,fallback:false,awaitingUser:false};
   }
@@ -965,7 +975,6 @@ a.length>D&&(D=a.length,p=0|1.25*D+7200,r=new Int8Array(p));a=u.lame_encode_buff
   }
   function startRecording(){
     if(!t().recordable) return;
-    if(pendingSave){ showSaveNotice('이전 녹음 파일을 먼저 저장하세요','error'); updateSaveAction(); return; }
     if(!cap.armed || !cap.stream){ showSaveNotice('녹음이 연결되지 않았습니다 · 상단의 흰색 원 버튼을 눌러 녹음을 연결하세요','error',12000); return; }
     if(typeof MediaRecorder==='undefined'){ showSaveNotice('이 브라우저에서는 녹음을 사용할 수 없습니다','error',12000); return; }
     try{
@@ -974,11 +983,12 @@ a.length>D&&(D=a.length,p=0|1.25*D+7200,r=new Int8Array(p));a=u.lame_encode_buff
       const rec = new MediaRecorder(cap.stream, mime?{mimeType:mime}:undefined);
       rec.ondataavailable=e=>{ if(e.data && e.data.size) cap.chunks.push(e.data); };
       rec.onerror=e=>{ console.error('Recording failed',e.error||e); flashStatus('녹음 오류 · 녹음 연결을 다시 해주세요',12000); showSaveNotice('녹음 오류 · 녹음 연결을 다시 해주세요','error',12000); };
+      const recordingMeta={taskKey,question:qnum};
       rec.onstop=()=>{
         const chunks=cap.chunks; cap.chunks=[];
         if(cap.discard) return;
         if(!chunks.length){ flashStatus('저장 실패 · 녹음 데이터가 없습니다',12000); showSaveNotice('MP3 저장 실패 · 녹음 데이터가 없습니다','error',12000); return; }
-        saveRecording(new Blob(chunks,{type:rec.mimeType||'audio/webm'}));
+        saveRecording(new Blob(chunks,{type:rec.mimeType||'audio/webm'}),recordingMeta);
       };
       cap.rec=rec; rec.start(1000); updateSaveAction();
       els.phaseSub.textContent='녹음 중 · mp3 기록';
@@ -989,9 +999,9 @@ a.length>D&&(D=a.length,p=0|1.25*D+7200,r=new Int8Array(p));a=u.lame_encode_buff
     if(rec && rec.state!=='inactive'){ cap.discard=!save; try{ rec.stop(); }catch(e){} }
     cap.rec=null; updateSaveAction();
   }
-  async function saveRecording(blob){
-    const task=TASKS[taskKey], fileLabel=task.file||task.name.replace(/[^A-Za-z0-9]+/g,'');
-    const base=task.mode==='free'?`PTE_${fileLabel}_${stamp()}`:`PTE_${fileLabel}_Q${qnum}_${stamp()}`;
+  async function saveRecording(blob,meta={taskKey,question:qnum}){
+    const task=TASKS[meta.taskKey], fileLabel=task.file||task.name.replace(/[^A-Za-z0-9]+/g,'');
+    const base=task.mode==='free'?`PTE_${fileLabel}_${stamp()}`:`PTE_${fileLabel}_Q${meta.question}_${stamp()}`;
     flashStatus('mp3 저장 중…');
     showSaveNotice('MP3 파일을 만드는 중…','pending');
     try{
@@ -1002,12 +1012,12 @@ a.length>D&&(D=a.length,p=0|1.25*D+7200,r=new Int8Array(p));a=u.lame_encode_buff
         const mp3=encodeMp3(audio);
         if(!mp3.size) throw new Error('MP3 인코딩 결과가 비어 있습니다');
         const name=base+'.mp3', result=await saveFile(mp3,name);
-        const message=result.direct?('✓ MP3 저장 완료 · '+name):result.fallback?'폴더 저장 실패 · 다운로드 폴더에 MP3 백업됨':result.awaitingUser?'MP3 준비 완료 · 아래 저장 버튼을 누르세요':('MP3 다운로드 완료 · '+name);
+        const message=result.direct?('✓ MP3 저장 완료 · '+name):result.fallback?'폴더 저장 실패 · 다운로드 폴더에 MP3 백업됨':result.awaitingUser?(sessionActive?`MP3 준비 완료 · 세션 종료 후 저장 (${result.queued}개)`:'MP3 준비 완료 · 아래 저장 버튼을 누르세요'):('MP3 다운로드 완료 · '+name);
         flashStatus(message,result.fallback?12000:result.awaitingUser?30000:6500); showSaveNotice(message,result.fallback?'error':'success',result.awaitingUser?0:12000); return;
       }
     }catch(error){ console.error('MP3 conversion failed',error); }
     const name=base+'.webm', result=await saveFile(blob,name);
-    const message=result.direct?'MP3 변환 실패 · WebM 자동 저장됨':result.fallback?'MP3 변환·폴더 저장 실패 · 다운로드 폴더에 WebM 백업됨':result.awaitingUser?'MP3 변환 실패 · 아래 버튼으로 WebM 파일을 저장하세요':'MP3 변환 실패 · WebM 다운로드됨';
+    const message=result.direct?'MP3 변환 실패 · WebM 자동 저장됨':result.fallback?'MP3 변환·폴더 저장 실패 · 다운로드 폴더에 WebM 백업됨':result.awaitingUser?(sessionActive?`WebM 준비 완료 · 세션 종료 후 저장 (${result.queued}개)`:'MP3 변환 실패 · 아래 버튼으로 WebM 파일을 저장하세요'):'MP3 변환 실패 · WebM 다운로드됨';
     flashStatus(message,12000); showSaveNotice(message,'error',result.awaitingUser?0:12000);
   }
   function encodeMp3(audio){
@@ -1029,7 +1039,7 @@ a.length>D&&(D=a.length,p=0|1.25*D+7200,r=new Int8Array(p));a=u.lame_encode_buff
     if(!pendingSave) return;
     const item=pendingSave;
     if(typeof File==='undefined'){
-      download(item.blob,item.name); pendingSave=null; updateSaveAction();
+      download(item.blob,item.name); saveQueue.shift(); pendingSave=saveQueue[0]||null; updateSaveAction();
       showSaveNotice('다운로드로 저장했습니다 · '+item.name,'success',12000); return;
     }
     const file=new File([item.blob],item.name,{type:item.blob.type||'application/octet-stream'});
@@ -1037,11 +1047,11 @@ a.length>D&&(D=a.length,p=0|1.25*D+7200,r=new Int8Array(p));a=u.lame_encode_buff
       if(capabilities.fileShare&&(!navigator.canShare||navigator.canShare({files:[file]}))){
         await navigator.share({files:[file],title:item.name});
       }else download(item.blob,item.name);
-      pendingSave=null; updateSaveAction();
-      showSaveNotice('✓ 저장 메뉴로 전달 완료 · '+item.name,'success',12000);
+      saveQueue.shift(); pendingSave=saveQueue[0]||null; updateSaveAction();
+      showSaveNotice(pendingSave?`✓ 저장 완료 · 남은 파일 ${saveQueue.length}개`:'✓ 저장 메뉴로 전달 완료 · '+item.name,'success',pendingSave?0:12000);
     }catch(error){
       if(error&&error.name==='AbortError') showSaveNotice('저장이 취소되었습니다 · 버튼을 눌러 다시 저장할 수 있습니다','error');
-      else{ download(item.blob,item.name); pendingSave=null; updateSaveAction(); showSaveNotice('공유 기능을 사용할 수 없어 다운로드로 저장했습니다','success',12000); }
+      else{ download(item.blob,item.name); saveQueue.shift(); pendingSave=saveQueue[0]||null; updateSaveAction(); showSaveNotice(pendingSave?`다운로드 완료 · 남은 파일 ${saveQueue.length}개`:'공유 기능을 사용할 수 없어 다운로드로 저장했습니다','success',pendingSave?0:12000); }
     }
   }
   function stamp(){ const d=new Date(),p=x=>String(x).padStart(2,'0'); return `${d.getFullYear()}${p(d.getMonth()+1)}${p(d.getDate())}_${p(d.getHours())}${p(d.getMinutes())}${p(d.getSeconds())}`; }
@@ -1076,13 +1086,13 @@ a.length>D&&(D=a.length,p=0|1.25*D+7200,r=new Int8Array(p));a=u.lame_encode_buff
   function adjust(field,d){ cur[field]=clampFor(taskKey,cur[field]+d); buildPlan(); if(!running && (phase==='idle'||phase==='done')) resetTimer(false); }
 
   function selectTask(k){
-    taskKey=k; cur=curClone();
+    taskKey=k; cur=curClone(); qnum=1;
     els.pickerNum.textContent=TASKS[k].key;
     els.pickerLabel.textContent=TASKS[k].full?`${TASKS[k].name} · ${TASKS[k].full}`:TASKS[k].name;
     els.app.dataset.task=k;
     els.app.dataset.recordable=TASKS[k].recordable?'true':'false';
     [...els.pickerMenu.children].forEach(b=>b.classList.toggle('on', b.dataset.k===k));
-    resetTimer(false); buildPlan();
+    resetTimer(false); updateCounter(); buildPlan();
   }
 
   function startPhase(name,dur){
@@ -1098,11 +1108,9 @@ a.length>D&&(D=a.length,p=0|1.25*D+7200,r=new Int8Array(p));a=u.lame_encode_buff
   function begin(){
     // 사용자 클릭/키 입력 시 오디오를 먼저 활성화해, 준비 시간이 끝난 뒤에도 비프음이 보장되게 한다.
     unlockAudio();
-    if(pendingSave&&t().recordable&&(phase==='idle'||phase==='done')){
-      showSaveNotice('이전 녹음 파일을 먼저 저장한 뒤 새 녹음을 시작하세요','error'); updateSaveAction(); return;
-    }
     if(phase==='idle'||phase==='done'){
       resetTimer(false);
+      if(t().mode==='two'){ qnum=1; sessionActive=true; updateCounter(); clearTimeout(cap.noticeTimer); els.saveNotice.hidden=true; updateSaveAction(); }
       if(t().mode==='free') startPhase('record',Infinity);
       else if(t().mode==='single') startPhase('single', cur.seconds);
       else startPhase('prep', cur.prep);
@@ -1145,6 +1153,14 @@ a.length>D&&(D=a.length,p=0|1.25*D+7200,r=new Int8Array(p));a=u.lame_encode_buff
       if(t().mode==='free'){ paintTimeElapsed(finalElapsed); setRing(1); }
       else{ paintTime(0); setRing(0); }
       updateStartBtn(); buildPlan();
+      if(t().mode==='two'&&sessionActive&&qnum<questionTotal()){
+        els.phaseSub.textContent=`${qnum} / ${questionTotal()} 완료 · 다음 문제 준비`;
+        els.start.disabled=true; els.start.textContent='다음 문제…';
+        autoNextTimer=setTimeout(()=>{ autoNextTimer=null; els.start.disabled=false; qnum++; updateCounter(); startPhase('prep',cur.prep); },700);
+      }else{
+        sessionActive=false; updateSaveAction();
+        if(t().mode==='two'&&questionTotal()>1) els.phaseSub.textContent=`${questionTotal()}문제 연속 진행 완료`;
+      }
     }
   }
   function finishRecordingNow(){
@@ -1163,6 +1179,8 @@ a.length>D&&(D=a.length,p=0|1.25*D+7200,r=new Int8Array(p));a=u.lame_encode_buff
   function setRing(frac){ els.ring.style.strokeDashoffset=CIRC*(1-Math.max(0,Math.min(1,frac))); }
 
   function resetTimer(startFresh){
+    clearTimeout(autoNextTimer); autoNextTimer=null; sessionActive=false;
+    els.start.disabled=false;
     stopRecording(false);
     clearSaveNotice();
     cancelAnimationFrame(raf); running=false; phase='idle'; accum=0;
@@ -1170,10 +1188,10 @@ a.length>D&&(D=a.length,p=0|1.25*D+7200,r=new Int8Array(p));a=u.lame_encode_buff
     els.phaseText.textContent='준비 완료'; els.phaseSub.textContent='시작을 누르세요';
     els.dot.style.background=accentColor();
     duration=firstDuration(); paintTime(duration); setRing(1);
-    updateStartBtn(); buildPlan();
+    updateStartBtn(); updateCounter(); buildPlan(); updateSaveAction();
     if(startFresh) begin();
   }
-  function nextQuestion(){ if(t().mode==='free'){ resetTimer(false); return; } qnum++; els.qnum.textContent=qnum; cur=curClone(); resetTimer(false); }
+  function nextQuestion(){ if(t().mode==='free'){ resetTimer(false); return; } qnum=qnum>=questionTotal()?1:qnum+1; cur=curClone(); resetTimer(false); updateCounter(); }
   function updateStartBtn(){
     els.start.textContent = running ? '⏸ 정지'
       : (phase==='prep'||phase==='record'||phase==='single') ? '▶ 계속' : '▶ 시작';
@@ -1187,18 +1205,19 @@ a.length>D&&(D=a.length,p=0|1.25*D+7200,r=new Int8Array(p));a=u.lame_encode_buff
       const ctrls=document.createElement('div'); ctrls.className='set-ctrls';
       if(cfg.mode==='free'){ const note=document.createElement('span'); note.className='rec-label'; note.textContent='시간 제한 없음 · 완료 버튼으로 저장'; ctrls.appendChild(note); }
       else if(cfg.mode==='single') ctrls.appendChild(setSeg(k,'시간','seconds'));
-      else{ ctrls.appendChild(setSeg(k,'준비','prep')); ctrls.appendChild(setSeg(k,'녹음','record')); }
+      else{ ctrls.appendChild(setSeg(k,'준비','prep')); ctrls.appendChild(setSeg(k,'녹음','record')); ctrls.appendChild(setSeg(k,'문제 수','questions',1)); }
       row.appendChild(name); row.appendChild(ctrls); els.setRows.appendChild(row);
     });
   }
-  function setSeg(k,label,field){
+  function setSeg(k,label,field,step=TASKS[k].step){
     const cfg=TASKS[k], d=DEFAULTS[k];
     const seg=document.createElement('div'); seg.className='seg';
-    seg.innerHTML=`<span class="lbl">${label}</span><button class="step">−</button><b>${fmtSeg(d[field])}</b><button class="step">+</button>`;
+    const format=v=>field==='questions'?v+'문제':fmtSeg(v);
+    seg.innerHTML=`<span class="lbl">${label}</span><button class="step">−</button><b>${format(d[field])}</b><button class="step">+</button>`;
     const [m,p]=seg.querySelectorAll('.step'), b=seg.querySelector('b');
-    const upd=dd=>{ d[field]=clampFor(k,d[field]+dd); b.textContent=fmtSeg(d[field]); saveDefaults();
-      if(k===taskKey){ cur=curClone(); if(!running&&(phase==='idle'||phase==='done')) resetTimer(false); } };
-    m.onclick=()=>upd(-cfg.step); p.onclick=()=>upd(cfg.step);
+    const upd=dd=>{ d[field]=field==='questions'?Math.max(1,Math.min(50,d[field]+dd)):clampFor(k,d[field]+dd); b.textContent=format(d[field]); saveDefaults();
+      if(k===taskKey){ cur=curClone(); updateCounter(); if(!running&&(phase==='idle'||phase==='done')) resetTimer(false); } };
+    m.onclick=()=>upd(-step); p.onclick=()=>upd(step);
     return seg;
   }
   function openSettings(){ buildSettings(); els.overlay.hidden=false; refreshFolderUI(); }
@@ -1208,7 +1227,7 @@ a.length>D&&(D=a.length,p=0|1.25*D+7200,r=new Int8Array(p));a=u.lame_encode_buff
   els.finishRecord.onclick=finishRecordingNow;
   els.reset.onclick=()=>resetTimer(false);
   els.next.onclick=nextQuestion;
-  els.counter.onclick=()=>{ qnum=1; els.qnum.textContent=1; };
+  els.counter.onclick=()=>{ qnum=1; updateCounter(); };
   els.pickerBtn.onclick=e=>{ e.stopPropagation(); els.pickerMenu.hidden?openPicker():closePicker(); };
   document.addEventListener('click', e=>{ if(!els.picker.contains(e.target)) closePicker(); });
   els.setBtn.onclick=openSettings;
