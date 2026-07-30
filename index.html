@@ -56,6 +56,12 @@
   .picker-item.on .pi-num{background:var(--accent);color:var(--ink)}
   .pi-name{font-weight:600;font-size:15px}
   .pi-full{color:var(--muted);font-size:12px;margin-left:auto;font-weight:400}
+  .session-goal{align-self:center;display:flex;align-items:center;gap:9px;background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:5px 6px 5px 13px;color:var(--muted);font-size:13px}
+  .session-goal[hidden]{display:none}
+  .session-goal .goal-label{font-weight:600;color:var(--text)}
+  .session-goal b{min-width:52px;text-align:center;color:var(--text);font-size:14px;font-variant-numeric:tabular-nums}
+  .session-goal .step{width:32px;height:32px;border:none;border-radius:8px;background:var(--surface-2);color:var(--muted);font-size:17px;cursor:pointer}
+  .session-goal .step:disabled{opacity:.4;cursor:not-allowed}
 
   .stage{position:relative;flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:clamp(8px,1.35vh,13px);min-height:0}
   .stage>*{position:relative;z-index:1}
@@ -150,6 +156,7 @@
   .app[data-device="tablet"] .device-badge{display:inline-flex}
   .app[data-device="tablet"] .iconbtn,.app[data-device="mobile"] .iconbtn{width:46px;height:44px;border-radius:12px}
   .app[data-device="tablet"] .picker-btn,.app[data-device="mobile"] .picker-btn{min-height:54px}
+  .app[data-device="tablet"] .session-goal .step,.app[data-device="mobile"] .session-goal .step{width:42px;height:42px}
   .app[data-device="tablet"] .picker-item,.app[data-device="mobile"] .picker-item{min-height:50px}
   .app[data-device="tablet"] .btn,.app[data-device="mobile"] .btn{min-height:48px}
   .app[data-device="tablet"] .ring-wrap{width:min(44vh,58vw,500px)}
@@ -192,7 +199,7 @@
   }
 </style>
 </head>
-<body data-build="continuous-session-v1">
+<body data-build="session-control-main-v1">
 <div class="app" id="app">
   <header>
     <div class="brand"><span class="dot" id="dot"></span>PTE&nbsp;TIMER</div>
@@ -215,6 +222,13 @@
       <span class="picker-chev">▾</span>
     </button>
     <div class="picker-menu" id="pickerMenu" hidden></div>
+  </div>
+
+  <div class="session-goal" id="sessionGoal">
+    <span class="goal-label">연속 문제 수</span>
+    <button class="step" id="questionMinus" type="button" aria-label="문제 수 줄이기">−</button>
+    <b id="questionGoalValue">1문제</b>
+    <button class="step" id="questionPlus" type="button" aria-label="문제 수 늘리기">+</button>
   </div>
 
   <div class="stage">
@@ -639,6 +653,7 @@ a.length>D&&(D=a.length,p=0|1.25*D+7200,r=new Int8Array(p));a=u.lame_encode_buff
     folderBtn:$('folderBtn'),folderTest:$('folderTest'),folderClear:$('folderClear'),folderStatus:$('folderStatus'),
     viewMode:$('viewModeSelect'),deviceStatus:$('deviceStatus'),deviceBadge:$('deviceBadge'),hint:$('hint'),
     systemSource:$('systemSourceOption'),bothSource:$('bothSourceOption'),recNote:$('recNote'),
+    sessionGoal:$('sessionGoal'),questionMinus:$('questionMinus'),questionPlus:$('questionPlus'),questionGoalValue:$('questionGoalValue'),
   };
   els.ring.style.strokeDasharray=CIRC;
 
@@ -713,6 +728,17 @@ a.length>D&&(D=a.length,p=0|1.25*D+7200,r=new Int8Array(p));a=u.lame_encode_buff
   function updateCounter(){
     els.qnum.textContent=qnum; els.qtotal.textContent=questionTotal();
     els.qtotalWrap.hidden=t().mode!=='two';
+    els.sessionGoal.hidden=t().mode!=='two';
+    els.questionGoalValue.textContent=questionTotal()+'문제';
+    const locked=sessionActive||running||phase==='prep'||phase==='record';
+    els.questionMinus.disabled=locked||questionTotal()<=1;
+    els.questionPlus.disabled=locked||questionTotal()>=50;
+  }
+  function adjustQuestionGoal(delta){
+    if(t().mode!=='two'||sessionActive||running) return;
+    const value=Math.max(1,Math.min(50,questionTotal()+delta));
+    cur.questions=value; DEFAULTS[taskKey].questions=value; qnum=1;
+    saveDefaults(); resetTimer(false); updateCounter();
   }
 
   // ---- audio beep ----
@@ -1205,19 +1231,18 @@ a.length>D&&(D=a.length,p=0|1.25*D+7200,r=new Int8Array(p));a=u.lame_encode_buff
       const ctrls=document.createElement('div'); ctrls.className='set-ctrls';
       if(cfg.mode==='free'){ const note=document.createElement('span'); note.className='rec-label'; note.textContent='시간 제한 없음 · 완료 버튼으로 저장'; ctrls.appendChild(note); }
       else if(cfg.mode==='single') ctrls.appendChild(setSeg(k,'시간','seconds'));
-      else{ ctrls.appendChild(setSeg(k,'준비','prep')); ctrls.appendChild(setSeg(k,'녹음','record')); ctrls.appendChild(setSeg(k,'문제 수','questions',1)); }
+      else{ ctrls.appendChild(setSeg(k,'준비','prep')); ctrls.appendChild(setSeg(k,'녹음','record')); }
       row.appendChild(name); row.appendChild(ctrls); els.setRows.appendChild(row);
     });
   }
-  function setSeg(k,label,field,step=TASKS[k].step){
+  function setSeg(k,label,field){
     const cfg=TASKS[k], d=DEFAULTS[k];
     const seg=document.createElement('div'); seg.className='seg';
-    const format=v=>field==='questions'?v+'문제':fmtSeg(v);
-    seg.innerHTML=`<span class="lbl">${label}</span><button class="step">−</button><b>${format(d[field])}</b><button class="step">+</button>`;
+    seg.innerHTML=`<span class="lbl">${label}</span><button class="step">−</button><b>${fmtSeg(d[field])}</b><button class="step">+</button>`;
     const [m,p]=seg.querySelectorAll('.step'), b=seg.querySelector('b');
-    const upd=dd=>{ d[field]=field==='questions'?Math.max(1,Math.min(50,d[field]+dd)):clampFor(k,d[field]+dd); b.textContent=format(d[field]); saveDefaults();
+    const upd=dd=>{ d[field]=clampFor(k,d[field]+dd); b.textContent=fmtSeg(d[field]); saveDefaults();
       if(k===taskKey){ cur=curClone(); updateCounter(); if(!running&&(phase==='idle'||phase==='done')) resetTimer(false); } };
-    m.onclick=()=>upd(-step); p.onclick=()=>upd(step);
+    m.onclick=()=>upd(-cfg.step); p.onclick=()=>upd(cfg.step);
     return seg;
   }
   function openSettings(){ buildSettings(); els.overlay.hidden=false; refreshFolderUI(); }
@@ -1228,6 +1253,8 @@ a.length>D&&(D=a.length,p=0|1.25*D+7200,r=new Int8Array(p));a=u.lame_encode_buff
   els.reset.onclick=()=>resetTimer(false);
   els.next.onclick=nextQuestion;
   els.counter.onclick=()=>{ qnum=1; updateCounter(); };
+  els.questionMinus.onclick=()=>adjustQuestionGoal(-1);
+  els.questionPlus.onclick=()=>adjustQuestionGoal(1);
   els.pickerBtn.onclick=e=>{ e.stopPropagation(); els.pickerMenu.hidden?openPicker():closePicker(); };
   document.addEventListener('click', e=>{ if(!els.picker.contains(e.target)) closePicker(); });
   els.setBtn.onclick=openSettings;
